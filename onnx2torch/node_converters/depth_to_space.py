@@ -1,4 +1,4 @@
-__all__ = ['OnnxDepthToSpace']
+__all__ = ["OnnxDepthToSpace"]
 
 import torch
 from torch import nn
@@ -20,16 +20,18 @@ class OnnxDepthToSpace(nn.Module, OnnxToTorchModule):  # pylint: disable=missing
         return torch.pixel_shuffle(input_tensor, upscale_factor=self._upscale_factor)
 
 
-@add_converter(operation_type='DepthToSpace', version=11)
-@add_converter(operation_type='DepthToSpace', version=13)
+@add_converter(operation_type="DepthToSpace", version=11)
+@add_converter(operation_type="DepthToSpace", version=13)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:
     del graph
 
-    blocksize: int = node.attributes['blocksize']  # required
-    mode: str = node.attributes.get('mode', 'DCR')
+    blocksize: int = node.attributes["blocksize"]  # required
+    mode: str = node.attributes.get("mode", "DCR")
 
-    if mode != 'CRD':
-        raise NotImplementedError('DepthToSpace for mode other than CRD is not implemented')
+    if mode != "CRD":
+        raise NotImplementedError(
+            "DepthToSpace for mode other than CRD is not implemented"
+        )
 
     return OperationConverterResult(
         torch_module=OnnxDepthToSpace(blocksize=blocksize),

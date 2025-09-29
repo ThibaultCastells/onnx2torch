@@ -1,5 +1,5 @@
 __all__ = [
-    'OnnxCumSum',
+    "OnnxCumSum",
 ]
 import torch
 from torch import nn
@@ -24,12 +24,16 @@ def _arbitrary_dim_shift_and_insert_zero(
     slice_index = tuple(slice_index)
     tensor_slice = input_tensor[slice_index]
 
-    insert_index = torch.arange(start=1, end=insert_dim_size, dtype=torch.int64, device=input_tensor.device)
+    insert_index = torch.arange(
+        start=1, end=insert_dim_size, dtype=torch.int64, device=input_tensor.device
+    )
     index_shape = [1] * len(input_tensor.shape)
     index_shape[insert_dim] = insert_dim_size - 1
 
     insert_index = torch.reshape(insert_index, index_shape)
-    insert_index = insert_index + torch.zeros_like(tensor_slice, dtype=torch.int64, device=input_tensor.device)
+    insert_index = insert_index + torch.zeros_like(
+        tensor_slice, dtype=torch.int64, device=input_tensor.device
+    )
 
     input_tensor = torch.scatter(
         input=input_tensor,
@@ -65,7 +69,9 @@ class OnnxCumSum(nn.Module, OnnxToTorchModule):  # pylint: disable=missing-docst
             input_tensor = torch.flip(input_tensor, dims=(axis,))
 
         if self.exclusive:
-            input_tensor = _arbitrary_dim_shift_and_insert_zero(input_tensor, insert_dim=axis)
+            input_tensor = _arbitrary_dim_shift_and_insert_zero(
+                input_tensor, insert_dim=axis
+            )
 
         input_tensor = torch.cumsum(input_tensor, dim=axis)
 
@@ -75,12 +81,12 @@ class OnnxCumSum(nn.Module, OnnxToTorchModule):  # pylint: disable=missing-docst
         return input_tensor
 
 
-@add_converter(operation_type='CumSum', version=11)
-@add_converter(operation_type='CumSum', version=14)
+@add_converter(operation_type="CumSum", version=11)
+@add_converter(operation_type="CumSum", version=14)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: disable=unused-argument
     node_attributes = node.attributes
-    exclusive = bool(node_attributes.get('exclusive', 0))
-    reverse = bool(node_attributes.get('reverse', 1))
+    exclusive = bool(node_attributes.get("exclusive", 0))
+    reverse = bool(node_attributes.get("reverse", 1))
 
     return OperationConverterResult(
         torch_module=OnnxCumSum(exclusive, reverse),

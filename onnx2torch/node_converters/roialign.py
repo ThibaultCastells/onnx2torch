@@ -1,5 +1,5 @@
 __all__ = [
-    'OnnxRoiAlign',
+    "OnnxRoiAlign",
 ]
 
 from enum import Enum
@@ -30,8 +30,8 @@ class CoordinateTransformationModeOnnxAttr(Enum):
     (use this for a backward-compatible behavior).
     """
 
-    HALF_PIXEL = 'half_pixel'
-    OUTPUT_HALF_PIXEL = 'output_half_pixel'
+    HALF_PIXEL = "half_pixel"
+    OUTPUT_HALF_PIXEL = "output_half_pixel"
 
 
 CTMOnnxAttr = CoordinateTransformationModeOnnxAttr  # Type alias.
@@ -41,7 +41,7 @@ class OnnxRoiAlign(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: dis
     def __init__(
         self,
         coordinate_transformation_mode: CTMOnnxAttr = CTMOnnxAttr.HALF_PIXEL,
-        mode: str = 'avg',
+        mode: str = "avg",
         output_height: int = 1,
         output_width: int = 1,
         sampling_ratio: int = 0,
@@ -51,7 +51,7 @@ class OnnxRoiAlign(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: dis
 
         self._coordinate_transformation_mode = coordinate_transformation_mode
 
-        if mode != 'avg':
+        if mode != "avg":
             raise NotImplementedError(f'"{mode}" roi align mode is not implemented.')
         self._mode = mode
 
@@ -62,22 +62,24 @@ class OnnxRoiAlign(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: dis
 
     def _onnx_attrs(self, opset_version: int) -> Dict[str, Any]:
         onnx_attrs: Dict[str, Any] = {
-            'mode_s': self._mode,
-            'output_height_i': self._output_height,
-            'output_width_i': self._output_width,
-            'sampling_ratio_i': self._sampling_ratio,
-            'spatial_scale_f': self._spatial_scale,
+            "mode_s": self._mode,
+            "output_height_i": self._output_height,
+            "output_width_i": self._output_width,
+            "sampling_ratio_i": self._sampling_ratio,
+            "spatial_scale_f": self._spatial_scale,
         }
 
         if opset_version < 16:
             if self._coordinate_transformation_mode != CTMOnnxAttr.OUTPUT_HALF_PIXEL:
                 raise ValueError(
                     'RoiAlign from opset 10 does not support coordinate_transform_mode != "output_half_pixel"'
-                    f', got {self._coordinate_transformation_mode.value}'
+                    f", got {self._coordinate_transformation_mode.value}"
                 )
             return onnx_attrs
 
-        onnx_attrs['coordinate_transformation_mode_s'] = self._coordinate_transformation_mode.value
+        onnx_attrs["coordinate_transformation_mode_s"] = (
+            self._coordinate_transformation_mode.value
+        )
         return onnx_attrs
 
     def forward(  # pylint: disable=missing-function-docstring
@@ -104,7 +106,9 @@ class OnnxRoiAlign(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: dis
 
         if torch.onnx.is_in_onnx_export():
             onnx_attrs = self._onnx_attrs(get_onnx_version())
-            return DefaultExportToOnnx.export(_forward, 'RoiAlign', input_tensor, rois, batch_indices, onnx_attrs)
+            return DefaultExportToOnnx.export(
+                _forward, "RoiAlign", input_tensor, rois, batch_indices, onnx_attrs
+            )
 
         return _forward()
 
@@ -115,12 +119,14 @@ def converter_schema(  # pylint: disable=missing-function-docstring, unused-argu
     default_ctm: str,
 ) -> OperationConverterResult:
     node_attributes = node.attributes
-    coordinate_transformation_mode = CTMOnnxAttr(node_attributes.get('coordinate_transformation_mode', default_ctm))
-    mode = node_attributes.get('mode', 'avg')
-    output_height = node_attributes.get('output_height', 1)
-    output_width = node_attributes.get('output_width', 1)
-    sampling_ratio = node_attributes.get('sampling_ratio', 0)
-    spatial_scale = node_attributes.get('spatial_scale', 1.0)
+    coordinate_transformation_mode = CTMOnnxAttr(
+        node_attributes.get("coordinate_transformation_mode", default_ctm)
+    )
+    mode = node_attributes.get("mode", "avg")
+    output_height = node_attributes.get("output_height", 1)
+    output_width = node_attributes.get("output_width", 1)
+    sampling_ratio = node_attributes.get("sampling_ratio", 0)
+    spatial_scale = node_attributes.get("spatial_scale", 1.0)
 
     return OperationConverterResult(
         torch_module=OnnxRoiAlign(
@@ -135,11 +141,11 @@ def converter_schema(  # pylint: disable=missing-function-docstring, unused-argu
     )
 
 
-@add_converter(operation_type='RoiAlign', version=10)
+@add_converter(operation_type="RoiAlign", version=10)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: disable=unused-argument
-    return converter_schema(node=node, graph=graph, default_ctm='output_half_pixel')
+    return converter_schema(node=node, graph=graph, default_ctm="output_half_pixel")
 
 
-@add_converter(operation_type='RoiAlign', version=16)
+@add_converter(operation_type="RoiAlign", version=16)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: disable=unused-argument
-    return converter_schema(node=node, graph=graph, default_ctm='half_pixel')
+    return converter_schema(node=node, graph=graph, default_ctm="half_pixel")

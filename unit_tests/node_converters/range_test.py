@@ -13,13 +13,15 @@ def _test_range(
     limit: np.ndarray,
     delta: np.ndarray,
 ) -> None:
-    test_inputs = {'start': start, 'limit': limit, 'delta': delta}
-    node = onnx.helper.make_node(op_type='Range', inputs=list(test_inputs), outputs=['y'])
+    test_inputs = {"start": start, "limit": limit, "delta": delta}
+    node = onnx.helper.make_node(
+        op_type="Range", inputs=list(test_inputs), outputs=["y"]
+    )
 
     num_elements = int(max(np.ceil((limit - start) / delta), 0))
     outputs_info = [
         make_tensor_value_info(
-            name='y',
+            name="y",
             elem_type=NP_TYPE_TO_TENSOR_TYPE[delta.dtype],
             shape=[num_elements],
         ),
@@ -33,7 +35,7 @@ def _test_range(
     check_onnx_model(model, test_inputs)
 
 
-@pytest.mark.filterwarnings('ignore::torch.jit._trace.TracerWarning')
+@pytest.mark.filterwarnings("ignore::torch.jit._trace.TracerWarning")
 def test_range() -> None:  # pylint: disable=missing-function-docstring
     _test_range(
         start=np.array(1, dtype=np.int32),

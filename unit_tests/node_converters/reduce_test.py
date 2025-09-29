@@ -13,11 +13,11 @@ from tests.utils.common import make_model_from_nodes
 
 
 def _test_reduce(input_tensor: np.ndarray, op_type: str, tol: float, **kwargs) -> None:
-    test_inputs = {'input_tensor': input_tensor}
+    test_inputs = {"input_tensor": input_tensor}
     node = onnx.helper.make_node(
         op_type=op_type,
         inputs=list(test_inputs),
-        outputs=['y'],
+        outputs=["y"],
         **kwargs,
     )
     model = make_model_from_nodes(
@@ -40,33 +40,35 @@ def _test_reduce_sum(
     keepdims: Optional[int] = 1,
     noop_with_empty_axes: Optional[int] = 0,
 ) -> None:
-    test_inputs = {'input_tensor': input_tensor}
+    test_inputs = {"input_tensor": input_tensor}
     kwargs = {}
 
     if keepdims is not None:
-        kwargs['keepdims'] = keepdims
+        kwargs["keepdims"] = keepdims
     else:
         keepdims = 1
 
     if noop_with_empty_axes is not None:
-        kwargs['noop_with_empty_axes'] = noop_with_empty_axes == 1
+        kwargs["noop_with_empty_axes"] = noop_with_empty_axes == 1
     else:
         noop_with_empty_axes = 0
 
     if axes is not None and len(axes) > 0:
-        test_inputs['axes'] = np.array(axes, dtype=np.int64)
-        output_shape = np.sum(input_tensor, axis=tuple(axes), keepdims=bool(keepdims)).shape
+        test_inputs["axes"] = np.array(axes, dtype=np.int64)
+        output_shape = np.sum(
+            input_tensor, axis=tuple(axes), keepdims=bool(keepdims)
+        ).shape
     else:
-        test_inputs['axes'] = np.array([], dtype=np.int64)
+        test_inputs["axes"] = np.array([], dtype=np.int64)
         if noop_with_empty_axes == 0:
             output_shape = np.sum(input_tensor, keepdims=bool(keepdims)).shape
         else:
             output_shape = input_tensor.shape
 
     node = onnx.helper.make_node(
-        op_type='ReduceSum',
+        op_type="ReduceSum",
         inputs=list(test_inputs),
-        outputs=['y'],
+        outputs=["y"],
         **kwargs,
     )
     model = make_model_from_nodes(
@@ -76,7 +78,7 @@ def _test_reduce_sum(
         opset_version=13,
         outputs_info=(
             make_tensor_value_info(
-                name='y',
+                name="y",
                 elem_type=NP_TYPE_TO_TENSOR_TYPE[input_tensor.dtype],
                 shape=output_shape,
             ),
@@ -92,22 +94,22 @@ def _test_reduce_sum(
 
 
 @pytest.mark.parametrize(
-    'op_type,tol',
+    "op_type,tol",
     (
-        ('ReduceL1', 10**-5),
-        ('ReduceL2', 10**-5),
-        ('ReduceLogSum', 10**-5),
-        ('ReduceLogSumExp', 10**-5),
-        ('ReduceMax', 0),
-        ('ReduceMin', 0),
-        ('ReduceMean', 10**-5),
-        ('ReduceSum', 10**-5),
-        ('ReduceProd', 10**-5),
-        ('ReduceSumSquare', 10**-5),
+        ("ReduceL1", 10**-5),
+        ("ReduceL2", 10**-5),
+        ("ReduceLogSum", 10**-5),
+        ("ReduceLogSumExp", 10**-5),
+        ("ReduceMax", 0),
+        ("ReduceMin", 0),
+        ("ReduceMean", 10**-5),
+        ("ReduceSum", 10**-5),
+        ("ReduceProd", 10**-5),
+        ("ReduceSumSquare", 10**-5),
     ),
 )
 @pytest.mark.parametrize(
-    'shape,axes,keepdims',
+    "shape,axes,keepdims",
     (
         ((1, 3, 8, 8), None, None),
         ((1, 3, 8, 8), None, 0),
@@ -127,26 +129,26 @@ def test_reduce(  # pylint: disable=missing-function-docstring
     axes: Optional[int],
     keepdims: Optional[int],
 ) -> None:
-    if op_type == 'ReduceLogSum':
+    if op_type == "ReduceLogSum":
         left_boundary = 10**-5
     else:
         left_boundary = -10
 
     test_kwargs = {
-        'input_tensor': np.random.uniform(left_boundary, 10, shape).astype(np.float32),
-        'op_type': op_type,
-        'tol': tol,
+        "input_tensor": np.random.uniform(left_boundary, 10, shape).astype(np.float32),
+        "op_type": op_type,
+        "tol": tol,
     }
     if axes is not None:
-        test_kwargs['axes'] = axes
+        test_kwargs["axes"] = axes
     if keepdims is not None:
-        test_kwargs['keepdims'] = keepdims
+        test_kwargs["keepdims"] = keepdims
 
     _test_reduce(**test_kwargs)
 
 
 @pytest.mark.parametrize(
-    'shape,axes,keepdims,noop_with_empty_axes',
+    "shape,axes,keepdims,noop_with_empty_axes",
     (
         ((1, 3, 8, 8), None, None, None),
         ((1, 3, 8, 8), None, 0, 0),

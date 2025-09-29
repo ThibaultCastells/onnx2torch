@@ -1,5 +1,5 @@
 __all__ = [
-    'OnnxCast',
+    "OnnxCast",
 ]
 
 import torch
@@ -36,17 +36,19 @@ class OnnxCast(nn.Module, OnnxToTorchModule):  # pylint: disable=missing-docstri
         try:
             self.torch_dtype = TENSOR_TYPE_TO_TORCH_TYPE[onnx_dtype]
         except KeyError as exc:
-            raise NotImplementedError(f'Conversion to "{onnx_dtype}" is not implemented') from exc
+            raise NotImplementedError(
+                f'Conversion to "{onnx_dtype}" is not implemented'
+            ) from exc
 
     def forward(self, input_tensor: torch.Tensor) -> torch.Tensor:  # pylint: disable=missing-function-docstring
         return input_tensor.to(self.torch_dtype)
 
 
-@add_converter(operation_type='Cast', version=9)
-@add_converter(operation_type='Cast', version=13)
+@add_converter(operation_type="Cast", version=9)
+@add_converter(operation_type="Cast", version=13)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: disable=unused-argument
     node_attributes = node.attributes
-    onnx_dtype = node_attributes.get('to', None)
+    onnx_dtype = node_attributes.get("to", None)
 
     return OperationConverterResult(
         torch_module=OnnxCast(onnx_dtype),

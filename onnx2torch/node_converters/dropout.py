@@ -1,5 +1,5 @@
 __all__ = [
-    'OnnxDropoutDynamic',
+    "OnnxDropoutDynamic",
 ]
 
 from typing import Optional
@@ -27,10 +27,10 @@ class OnnxDropoutDynamic(nn.Module, OnnxToTorchModule):  # pylint: disable=missi
         return F.dropout(input_tensor, p=ratio, training=self.training)
 
 
-@add_converter(operation_type='Dropout', version=10)
+@add_converter(operation_type="Dropout", version=10)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: disable=unused-argument
     node_attributes = node.attributes
-    ratio = node_attributes.get('ratio', 0.5)
+    ratio = node_attributes.get("ratio", 0.5)
 
     torch_module = nn.Dropout(p=ratio)
 
@@ -40,13 +40,13 @@ def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: 
     )
 
 
-@add_converter(operation_type='Dropout', version=12)
-@add_converter(operation_type='Dropout', version=13)
+@add_converter(operation_type="Dropout", version=12)
+@add_converter(operation_type="Dropout", version=13)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: disable=unused-argument
     node_attributes = node.attributes
-    seed = node_attributes.get('seed')
+    seed = node_attributes.get("seed")
     if seed is not None:
-        raise NotImplementedError('Dropout nodes with seeds are not supported.')
+        raise NotImplementedError("Dropout nodes with seeds are not supported.")
 
     return OperationConverterResult(
         torch_module=OnnxDropoutDynamic(),

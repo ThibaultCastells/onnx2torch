@@ -1,5 +1,5 @@
 __all__ = [
-    'OnnxTopK',
+    "OnnxTopK",
 ]
 
 from typing import Tuple
@@ -40,14 +40,14 @@ class OnnxTopK(nn.Module, OnnxToTorchModule):  # pylint: disable=missing-class-d
         return top_k.values, top_k.indices
 
 
-@add_converter(operation_type='TopK', version=1)
-@add_converter(operation_type='TopK', version=10)
-@add_converter(operation_type='TopK', version=11)
+@add_converter(operation_type="TopK", version=1)
+@add_converter(operation_type="TopK", version=10)
+@add_converter(operation_type="TopK", version=11)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: disable=unused-argument
     node_attributes = node.attributes
-    axis = node_attributes.get('axis', -1)
-    largest = node_attributes.get('largest', 1)
-    sorted_ = node_attributes.get('sorted', 1)
+    axis = node_attributes.get("axis", -1)
+    largest = node_attributes.get("largest", 1)
+    sorted_ = node_attributes.get("sorted", 1)
 
     return OperationConverterResult(
         torch_module=OnnxTopK(dim=axis, largest=largest, sorted_=sorted_),

@@ -1,13 +1,9 @@
-# PUT TITLE HERE
+# onnx2torch
 
-CONCISE DESCRIPTION OF WHAT THIS REPO IS ABOUT HERE.
+Convert ONNX models to torch.export ExportedProgram bundles (.pt2, ATen dialect).
 
 # core instructions
 
-- First-time setup
-    If you see this, it means it’s your first time working in this repo.
-    - Update the title and description above (see the README for details).
-    - Remove this "first-time setup" instruction afterward.
 - Environment setup:
     Run source `.venv/bin/activate` if the environment isn't activated yet.
 - Scripts & configs:

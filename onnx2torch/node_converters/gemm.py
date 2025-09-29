@@ -1,5 +1,5 @@
 __all__ = [
-    'OnnxGemm',
+    "OnnxGemm",
 ]
 
 from typing import Optional
@@ -43,21 +43,25 @@ class OnnxGemm(nn.Module, OnnxToTorchModule):  # pylint: disable=missing-class-d
         return output
 
 
-@add_converter(operation_type='Gemm', version=9)
-@add_converter(operation_type='Gemm', version=11)
-@add_converter(operation_type='Gemm', version=13)
+@add_converter(operation_type="Gemm", version=9)
+@add_converter(operation_type="Gemm", version=11)
+@add_converter(operation_type="Gemm", version=13)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:
     a_name = node.input_values[0]
     b_name = node.input_values[1]
     c_name = node.input_values[2] if len(node.input_values) > 2 else None
 
     node_attributes = node.attributes
-    alpha = node_attributes.get('alpha', 1.0)
-    beta = node_attributes.get('beta', 1.0)
-    trans_a = node_attributes.get('transA', 0) != 0
-    trans_b = node_attributes.get('transB', 0) != 0
+    alpha = node_attributes.get("alpha", 1.0)
+    beta = node_attributes.get("beta", 1.0)
+    trans_a = node_attributes.get("transA", 0) != 0
+    trans_b = node_attributes.get("transB", 0) != 0
 
-    if not trans_a and b_name in graph.initializers and (c_name is None or c_name in graph.initializers):
+    if (
+        not trans_a
+        and b_name in graph.initializers
+        and (c_name is None or c_name in graph.initializers)
+    ):
         if c_name is None:
             bias = None
         else:

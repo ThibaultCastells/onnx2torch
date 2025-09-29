@@ -14,13 +14,15 @@ def _test_reshape(
     opset_version: int,
     **kwargs,
 ) -> None:
-    test_inputs = {'x': np.random.uniform(low=-1.0, high=1.0, size=input_shape).astype(np.float32)}
-    initializers = {'output_shape': np.asarray(output_shape, dtype=np.int64)}
+    test_inputs = {
+        "x": np.random.uniform(low=-1.0, high=1.0, size=input_shape).astype(np.float32)
+    }
+    initializers = {"output_shape": np.asarray(output_shape, dtype=np.int64)}
 
     node = onnx.helper.make_node(
-        op_type='Reshape',
-        inputs=['x', 'output_shape'],
-        outputs=['y'],
+        op_type="Reshape",
+        inputs=["x", "output_shape"],
+        outputs=["y"],
         **kwargs,
     )
     model = make_model_from_nodes(
@@ -32,9 +34,9 @@ def _test_reshape(
     check_onnx_model(model, test_inputs)
 
 
-@pytest.mark.filterwarnings('ignore::torch.jit._trace.TracerWarning')
+@pytest.mark.filterwarnings("ignore::torch.jit._trace.TracerWarning")
 @pytest.mark.parametrize(
-    'input_shape,output_shape,opset_version',
+    "input_shape,output_shape,opset_version",
     (
         ([2, 3, 16, 16], [2, -1, 3], 9),
         ([2, 3, 16, 16], [2, 0, -1], 9),

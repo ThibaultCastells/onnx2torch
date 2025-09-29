@@ -1,5 +1,5 @@
 __all__ = [
-    'OnnxInstanceNorm',
+    "OnnxInstanceNorm",
 ]
 
 import torch
@@ -47,11 +47,11 @@ class OnnxInstanceNorm(nn.Module, OnnxToTorchModule):  # pylint: disable=missing
         )
 
 
-@add_converter(operation_type='InstanceNormalization', version=1)
-@add_converter(operation_type='InstanceNormalization', version=6)
+@add_converter(operation_type="InstanceNormalization", version=1)
+@add_converter(operation_type="InstanceNormalization", version=6)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:
     node_attributes = node.attributes
-    epsilon = node_attributes.get('epsilon', 1e-5)
+    epsilon = node_attributes.get("epsilon", 1e-5)
     momentum = 0.1
 
     if all(value_name in graph.initializers for value_name in node.input_values[1:]):
@@ -62,7 +62,7 @@ def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:
             in_class = _IN_CLASS_FROM_SPATIAL_RANK[spatial_rank]
         except KeyError as exc:
             raise NotImplementedError(
-                f'InstanceNorm operation with spatial rank == {spatial_rank} is not implemented'
+                f"InstanceNorm operation with spatial rank == {spatial_rank} is not implemented"
             ) from exc
 
         scale_value_name = node.input_values[1]
@@ -80,9 +80,13 @@ def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:
             torch_module.weight.data = graph.initializers[scale_value_name].to_torch()
             torch_module.bias.data = graph.initializers[bias_value_name].to_torch()
 
-        onnx_mapping = OnnxMapping(inputs=(node.input_values[0],), outputs=node.output_values)
+        onnx_mapping = OnnxMapping(
+            inputs=(node.input_values[0],), outputs=node.output_values
+        )
     else:
         torch_module = OnnxInstanceNorm(momentum=momentum, epsilon=epsilon)
         onnx_mapping = onnx_mapping_from_node(node)
 
-    return OperationConverterResult(torch_module=torch_module, onnx_mapping=onnx_mapping)
+    return OperationConverterResult(
+        torch_module=torch_module, onnx_mapping=onnx_mapping
+    )

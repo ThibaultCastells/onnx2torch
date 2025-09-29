@@ -1,5 +1,5 @@
 __all__ = [
-    'OnnxMatMul',
+    "OnnxMatMul",
 ]
 
 import torch
@@ -18,9 +18,9 @@ class OnnxMatMul(nn.Module, OnnxToTorchModule):  # pylint: disable=missing-class
         return torch.matmul(x, y)
 
 
-@add_converter(operation_type='MatMul', version=1)
-@add_converter(operation_type='MatMul', version=9)
-@add_converter(operation_type='MatMul', version=13)
+@add_converter(operation_type="MatMul", version=1)
+@add_converter(operation_type="MatMul", version=9)
+@add_converter(operation_type="MatMul", version=13)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: disable=unused-argument
     return OperationConverterResult(
         torch_module=OnnxMatMul(),

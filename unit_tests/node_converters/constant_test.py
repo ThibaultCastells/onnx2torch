@@ -15,13 +15,15 @@ def _test_constant_as_tensor(shape: Tuple[int, ...], dtype: np.dtype) -> None:
     values = np.random.randn(*shape).astype(dtype)
     onnx_type = NP_TYPE_TO_TENSOR_TYPE[values.dtype]
     node = onnx.helper.make_node(
-        'Constant',
+        "Constant",
         inputs=[],
-        outputs=['values'],
-        value=numpy_helper.from_array(values, name='const_tensor'),
+        outputs=["values"],
+        value=numpy_helper.from_array(values, name="const_tensor"),
     )
 
-    outputs_info = [make_tensor_value_info(name='values', elem_type=onnx_type, shape=values.shape)]
+    outputs_info = [
+        make_tensor_value_info(name="values", elem_type=onnx_type, shape=values.shape)
+    ]
     model = make_model_from_nodes(
         nodes=node,
         initializers={},
@@ -31,8 +33,8 @@ def _test_constant_as_tensor(shape: Tuple[int, ...], dtype: np.dtype) -> None:
     check_onnx_model(model, onnx_inputs={})
 
 
-@pytest.mark.filterwarnings('ignore:No input args')
+@pytest.mark.filterwarnings("ignore:No input args")
 def test_constant() -> None:  # pylint: disable=missing-function-docstring
-    _test_constant_as_tensor((16, 16, 16), np.dtype('int32'))
-    _test_constant_as_tensor((16, 16, 16), np.dtype('int32'))
-    _test_constant_as_tensor((16, 16, 16), np.dtype('float32'))
+    _test_constant_as_tensor((16, 16, 16), np.dtype("int32"))
+    _test_constant_as_tensor((16, 16, 16), np.dtype("int32"))
+    _test_constant_as_tensor((16, 16, 16), np.dtype("float32"))

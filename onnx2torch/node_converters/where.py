@@ -1,5 +1,5 @@
 __all__ = [
-    'OnnxWhere',
+    "OnnxWhere",
 ]
 
 import torch
@@ -23,8 +23,8 @@ class OnnxWhere(nn.Module, OnnxToTorchModule):  # pylint: disable=missing-class-
         return torch.where(condition, x, y)
 
 
-@add_converter(operation_type='Where', version=9)
-@add_converter(operation_type='Where', version=16)
+@add_converter(operation_type="Where", version=9)
+@add_converter(operation_type="Where", version=16)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: disable=unused-argument
     return OperationConverterResult(
         torch_module=OnnxWhere(),

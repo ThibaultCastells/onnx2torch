@@ -1,5 +1,5 @@
 __all__ = [
-    'OnnxEyeLike',
+    "OnnxEyeLike",
 ]
 
 from typing import Optional
@@ -24,17 +24,19 @@ class OnnxEyeLike(nn.Module, OnnxToTorchModule):  # pylint: disable=missing-docs
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:  # pylint: disable=missing-function-docstring
         if len(x.shape) != 2:
-            raise ValueError(f'EyeLike only supports 2D tensors, got {len(x.shape)}')
+            raise ValueError(f"EyeLike only supports 2D tensors, got {len(x.shape)}")
 
         dtype = x.dtype if self.dtype is None else onnx_dtype_to_torch_dtype(self.dtype)
         if not isinstance(dtype, torch.dtype):
-            raise ValueError(f'Expected type of dtype is torch.dtype, got {type(dtype)}')
+            raise ValueError(
+                f"Expected type of dtype is torch.dtype, got {type(dtype)}"
+            )
 
         rows, cols = x.size()
         if self.k > rows:
             raise ValueError(
-                f'EyeLike attribute k should be less or equal than the zero dimension of input tensor,'
-                f'got {self.k} and {rows}'
+                f"EyeLike attribute k should be less or equal than the zero dimension of input tensor,"
+                f"got {self.k} and {rows}"
             )
 
         if self.k == 0:
@@ -56,11 +58,11 @@ class OnnxEyeLike(nn.Module, OnnxToTorchModule):  # pylint: disable=missing-docs
         )
 
 
-@add_converter(operation_type='EyeLike', version=9)
+@add_converter(operation_type="EyeLike", version=9)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: disable=unused-argument
     node_attributes = node.attributes
-    k = node_attributes.get('k', 0)  # pylint: disable=invalid-name
-    dtype = node_attributes.get('dtype', None)
+    k = node_attributes.get("k", 0)  # pylint: disable=invalid-name
+    dtype = node_attributes.get("dtype", None)
     return OperationConverterResult(
         torch_module=OnnxEyeLike(dtype=dtype, k=k),
         onnx_mapping=onnx_mapping_from_node(node=node),

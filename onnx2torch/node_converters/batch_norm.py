@@ -1,5 +1,5 @@
 __all__ = [
-    'OnnxBatchNorm',
+    "OnnxBatchNorm",
 ]
 
 import torch
@@ -49,15 +49,20 @@ class OnnxBatchNorm(nn.Module, OnnxToTorchModule):  # pylint: disable=missing-do
         )
 
 
-@add_converter(operation_type='BatchNormalization', version=15)
-@add_converter(operation_type='BatchNormalization', version=14)
-@add_converter(operation_type='BatchNormalization', version=9)
+@add_converter(operation_type="BatchNormalization", version=15)
+@add_converter(operation_type="BatchNormalization", version=14)
+@add_converter(operation_type="BatchNormalization", version=9)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:
     node_attributes = node.attributes
-    epsilon = node_attributes.get('epsilon', 1e-5)
-    momentum = 1 - node_attributes.get('momentum', 0.9)  # See PyTorch documentation for batch norm.
+    epsilon = node_attributes.get("epsilon", 1e-5)
+    momentum = 1 - node_attributes.get(
+        "momentum", 0.9
+    )  # See PyTorch documentation for batch norm.
 
-    if all(value_name in graph.initializers for value_name in node.input_values[1:]) and len(node.output_values) == 1:
+    if (
+        all(value_name in graph.initializers for value_name in node.input_values[1:])
+        and len(node.output_values) == 1
+    ):
         input_value_info = graph.value_info[node.input_values[0]]
         input_shape = get_shape_from_value_info(input_value_info)
         spatial_rank = len(input_shape) - 2
@@ -65,7 +70,7 @@ def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:
             bn_class = _BN_CLASS_FROM_SPATIAL_RANK[spatial_rank]
         except KeyError as exc:
             raise NotImplementedError(
-                f'BatchNorm operation with spatial rank == {spatial_rank} is not implemented'
+                f"BatchNorm operation with spatial rank == {spatial_rank} is not implemented"
             ) from exc
 
         scale_value_name = node.input_values[1]
@@ -80,8 +85,12 @@ def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:
             momentum=momentum,
         )
         with torch.no_grad():
-            torch_module.running_mean.data = graph.initializers[mean_value_name].to_torch()
-            torch_module.running_var.data = graph.initializers[var_value_name].to_torch()
+            torch_module.running_mean.data = graph.initializers[
+                mean_value_name
+            ].to_torch()
+            torch_module.running_var.data = graph.initializers[
+                var_value_name
+            ].to_torch()
             torch_module.weight.data = scale
             torch_module.bias.data = graph.initializers[bias_value_name].to_torch()
 
@@ -91,7 +100,9 @@ def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:
         )
     else:
         if len(node.output_values) != 1:
-            raise NotImplementedError('BatchNorm operation with mean/var output is not implemented')
+            raise NotImplementedError(
+                "BatchNorm operation with mean/var output is not implemented"
+            )
 
         torch_module = OnnxBatchNorm(momentum=momentum, epsilon=epsilon)
         onnx_mapping = onnx_mapping_from_node(node)

@@ -9,7 +9,7 @@ from tests.utils.common import make_model_from_nodes
 
 
 @pytest.mark.parametrize(
-    'input_shape',
+    "input_shape",
     (
         [2, 3, 16, 16, 16],
         [2, 3, 16, 16],
@@ -18,14 +18,16 @@ from tests.utils.common import make_model_from_nodes
 )
 def test_global_avg_pool(input_shape: List[int]) -> None:  # pylint: disable=missing-function-docstring
     x = np.random.uniform(low=-1.0, high=1.0, size=input_shape).astype(np.float32)
-    test_inputs = {'x': x}
+    test_inputs = {"x": x}
 
     node = onnx.helper.make_node(
-        op_type='GlobalAveragePool',
-        inputs=['x'],
-        outputs=['y'],
+        op_type="GlobalAveragePool",
+        inputs=["x"],
+        outputs=["y"],
     )
-    model = make_model_from_nodes(nodes=node, initializers={}, inputs_example=test_inputs)
+    model = make_model_from_nodes(
+        nodes=node, initializers={}, inputs_example=test_inputs
+    )
     check_onnx_model(
         model,
         test_inputs,

@@ -24,7 +24,9 @@ class OnnxGraph:  # pylint: disable=missing-class-docstring
     def __init__(self, onnx_graph_proto: GraphProto):
         self._proto = onnx_graph_proto
         self._input_values = tuple(value_info.name for value_info in self._proto.input)
-        self._output_values = tuple(value_info.name for value_info in self._proto.output)
+        self._output_values = tuple(
+            value_info.name for value_info in self._proto.output
+        )
 
         unique_names = []
         counters = {}
@@ -32,16 +34,26 @@ class OnnxGraph:  # pylint: disable=missing-class-docstring
             name = OnnxGraph.generate_node_name(node)
             name_counter = counters.setdefault(name, 0)
             counters[name] += 1
-            unique_names.append(f'{name}' + (f'_{name_counter}' if name_counter > 0 else ''))
+            unique_names.append(
+                f"{name}" + (f"_{name_counter}" if name_counter > 0 else "")
+            )
 
         self._nodes = OrderedDict(
-            (name, OnnxNode(node, unique_name=name)) for name, node in zip(unique_names, onnx_graph_proto.node)
+            (name, OnnxNode(node, unique_name=name))
+            for name, node in zip(unique_names, onnx_graph_proto.node)
         )
-        self._initializers = {initializer.name: OnnxTensor(initializer) for initializer in onnx_graph_proto.initializer}
-        self._node_output_values = {
-            output_name: (node, i) for node in self._nodes.values() for i, output_name in enumerate(node.output_values)
+        self._initializers = {
+            initializer.name: OnnxTensor(initializer)
+            for initializer in onnx_graph_proto.initializer
         }
-        self._value_info = {value_info.name: value_info for value_info in onnx_graph_proto.value_info}
+        self._node_output_values = {
+            output_name: (node, i)
+            for node in self._nodes.values()
+            for i, output_name in enumerate(node.output_values)
+        }
+        self._value_info = {
+            value_info.name: value_info for value_info in onnx_graph_proto.value_info
+        }
         for input_value_info in onnx_graph_proto.input:
             self._value_info[input_value_info.name] = input_value_info
         for output_value_info in onnx_graph_proto.output:
@@ -85,7 +97,7 @@ class OnnxGraph:  # pylint: disable=missing-class-docstring
         if value_name in self._initializers:
             return ValueType.GRAPH_INITIALIZER
 
-        if value_name == '':
+        if value_name == "":
             return ValueType.EMPTY
 
         return ValueType.UNKNOWN
@@ -114,4 +126,6 @@ class OnnxGraph:  # pylint: disable=missing-class-docstring
         -------
         A torch-compatible module name based on the given node's properties.
         """
-        return (f'{node.domain}/' + (node.name.replace('.', '/') or node.op_type)).lstrip('/')
+        return (
+            f"{node.domain}/" + (node.name.replace(".", "/") or node.op_type)
+        ).lstrip("/")

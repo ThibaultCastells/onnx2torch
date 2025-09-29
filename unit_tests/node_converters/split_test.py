@@ -18,25 +18,25 @@ def _test_split(
     **kwargs,
 ) -> None:
     inputs = [
-        'x',
+        "x",
     ]
-    test_inputs = {'x': x}
+    test_inputs = {"x": x}
 
-    if opset_version >= 13 and kwargs.get('split') is not None:
-        split = kwargs.pop('split')
-        test_inputs['split'] = split
-        inputs.append('split')
+    if opset_version >= 13 and kwargs.get("split") is not None:
+        split = kwargs.pop("split")
+        test_inputs["split"] = split
+        inputs.append("split")
 
     node = onnx.helper.make_node(
-        op_type='Split',
+        op_type="Split",
         inputs=inputs,
-        outputs=[f'output_{i}' for i, _ in enumerate(expected_output)],
+        outputs=[f"output_{i}" for i, _ in enumerate(expected_output)],
         **kwargs,
     )
 
     outputs_info = [
         make_tensor_value_info(
-            name=f'output_{i}',
+            name=f"output_{i}",
             elem_type=NP_TYPE_TO_TENSOR_TYPE[out.dtype],
             shape=out.shape,
         )
@@ -54,25 +54,36 @@ def _test_split(
 
 
 INPUT_1D = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).astype(np.float32)
-INPUT_2D = np.array([[1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [7.0, 8.0, 9.0, 10.0, 11.0, 12.0]]).astype(np.float32)
+INPUT_2D = np.array(
+    [[1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [7.0, 8.0, 9.0, 10.0, 11.0, 12.0]]
+).astype(np.float32)
 
 EMPTY_INPUT = np.array([]).astype(np.float32)
-EXPECTED_EMPTY_OUT = [np.array([]).astype(np.float32), np.array([]).astype(np.float32), np.array([]).astype(np.float32)]
+EXPECTED_EMPTY_OUT = [
+    np.array([]).astype(np.float32),
+    np.array([]).astype(np.float32),
+    np.array([]).astype(np.float32),
+]
 
 
 @pytest.mark.parametrize(
-    'input_array,expected_out,axis,split',
+    "input_array,expected_out,axis,split",
     (
         (INPUT_1D, np.split(INPUT_1D, 3), None, None),
         (INPUT_1D, np.split(INPUT_1D, 3), 0, None),
         (INPUT_1D, np.split(INPUT_1D, [2]), None, np.array([2, 4]).astype(np.int64)),
         (INPUT_1D, np.split(INPUT_1D, [2]), 0, np.array([2, 4]).astype(np.int64)),
         (INPUT_2D, np.split(INPUT_2D, 2, axis=1), 1, None),
-        (INPUT_2D, np.split(INPUT_2D, [2], axis=1), 1, np.array([2, 4]).astype(np.int64)),
+        (
+            INPUT_2D,
+            np.split(INPUT_2D, [2], axis=1),
+            1,
+            np.array([2, 4]).astype(np.int64),
+        ),
         (EMPTY_INPUT, EXPECTED_EMPTY_OUT, None, np.array([0, 0, 0]).astype(np.int64)),
     ),
 )
-@pytest.mark.parametrize('opset_version', (13, 11, 2))
+@pytest.mark.parametrize("opset_version", (13, 11, 2))
 def test_split(  # pylint: disable=missing-function-docstring
     input_array: np.ndarray,
     expected_out: List[np.ndarray],
@@ -82,8 +93,8 @@ def test_split(  # pylint: disable=missing-function-docstring
 ) -> None:
     kwargs = {}
     if axis is not None:
-        kwargs['axis'] = axis
+        kwargs["axis"] = axis
     if split is not None:
-        kwargs['split'] = split
+        kwargs["split"] = split
 
     _test_split(input_array, expected_out, opset_version=opset_version, **kwargs)

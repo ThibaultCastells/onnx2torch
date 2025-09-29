@@ -19,12 +19,12 @@ def test_matmul() -> None:  # pylint: disable=missing-function-docstring
     ]
 
     for x, y in zip(x_variants, y_variants):
-        test_inputs = {'x': x, 'y': y}
+        test_inputs = {"x": x, "y": y}
         initializers = {}
         node = onnx.helper.make_node(
-            op_type='MatMul',
-            inputs=['x', 'y'],
-            outputs=['z'],
+            op_type="MatMul",
+            inputs=["x", "y"],
+            outputs=["z"],
         )
 
         model = make_model_from_nodes(

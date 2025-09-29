@@ -1,6 +1,6 @@
 # pylint: disable=missing-docstring
 __all__ = [
-    'OnnxNonMaxSuppression',
+    "OnnxNonMaxSuppression",
 ]
 
 from typing import Any
@@ -28,7 +28,7 @@ class OnnxNonMaxSuppression(nn.Module, OnnxToTorchModuleWithCustomExport):
 
     def _onnx_attrs(self, opset_version: int) -> Dict[str, Any]:
         del opset_version
-        return {'center_point_box_i': self._center_point_box}
+        return {"center_point_box_i": self._center_point_box}
 
     def forward(
         self,
@@ -39,7 +39,13 @@ class OnnxNonMaxSuppression(nn.Module, OnnxToTorchModuleWithCustomExport):
         score_threshold: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         def _forward() -> torch.Tensor:
-            return self._nms(boxes, scores, max_output_boxes_per_class, iou_threshold, score_threshold)
+            return self._nms(
+                boxes,
+                scores,
+                max_output_boxes_per_class,
+                iou_threshold,
+                score_threshold,
+            )
 
         if torch.onnx.is_in_onnx_export():
             if max_output_boxes_per_class is None:
@@ -52,7 +58,7 @@ class OnnxNonMaxSuppression(nn.Module, OnnxToTorchModuleWithCustomExport):
             onnx_attrs = self._onnx_attrs(opset_version=get_onnx_version())
             return DefaultExportToOnnx.export(
                 _forward,
-                'NonMaxSuppression',
+                "NonMaxSuppression",
                 boxes,
                 scores,
                 max_output_boxes_per_class,
@@ -90,8 +96,8 @@ class OnnxNonMaxSuppression(nn.Module, OnnxToTorchModuleWithCustomExport):
                 if self._center_point_box:
                     filtered_batch_boxes = torchvision.ops.box_convert(
                         filtered_batch_boxes,
-                        in_fmt='cxcywh',
-                        out_fmt='xyxy',
+                        in_fmt="cxcywh",
+                        out_fmt="xyxy",
                     )
 
                 nms_indexes = torchvision.ops.nms(
@@ -103,18 +109,20 @@ class OnnxNonMaxSuppression(nn.Module, OnnxToTorchModuleWithCustomExport):
                 nms_indexes = nms_indexes[:num_boxes]
                 indexes = confidence_indexes[nms_indexes]
 
-                out.extend([batch_index, class_index, box_index] for box_index in indexes)
+                out.extend(
+                    [batch_index, class_index, box_index] for box_index in indexes
+                )
         if len(out) == 0:
             return torch.empty([0, 3], dtype=torch.int64, device=boxes.device)
 
         return torch.tensor(out, dtype=torch.int64, device=boxes.device)
 
 
-@add_converter(operation_type='NonMaxSuppression', version=10)
-@add_converter(operation_type='NonMaxSuppression', version=11)
+@add_converter(operation_type="NonMaxSuppression", version=10)
+@add_converter(operation_type="NonMaxSuppression", version=11)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:
     del graph
-    center_point_box = node.attributes.get('center_point_box', 0)
+    center_point_box = node.attributes.get("center_point_box", 0)
     return OperationConverterResult(
         torch_module=OnnxNonMaxSuppression(center_point_box=center_point_box),
         onnx_mapping=onnx_mapping_from_node(node),

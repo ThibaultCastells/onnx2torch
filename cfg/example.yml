@@ -1,0 +1,25 @@
+# Example configuration for run.py
+# This configuration converts every .onnx model under data/onnx/ recursively.
+inputs:
+  - path: data/onnx
+    recursive: true
+    pattern: '*.onnx'
+
+# Destination directory for the generated .pt2 files.
+output_dir: data/executorch
+
+conversion:
+  save_input_names: false
+  attach_onnx_mapping: false
+
+# Optional sample input overrides. The defaults produce zero tensors that match
+# the shapes inferred from the ONNX model. Uncomment to customize an input.
+# example_inputs:
+#   default_fill: zeros
+#   overrides:
+#     input_1:
+#       shape: [1, 3, 224, 224]
+#       dtype: float32
+#       fill: ones
+
+device: cpu

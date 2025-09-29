@@ -1,6 +1,6 @@
 # pylint: disable=missing-docstring
 __all__ = [
-    'OnnxRange',
+    "OnnxRange",
 ]
 
 from typing import Union
@@ -20,7 +20,7 @@ from onnx2torch.utils.custom_export_to_onnx import OnnxToTorchModuleWithCustomEx
 class OnnxRange(nn.Module, OnnxToTorchModuleWithCustomExport):
     def __init__(self):
         super().__init__()
-        self.register_buffer('dummy_buffer', torch.Tensor(), persistent=False)
+        self.register_buffer("dummy_buffer", torch.Tensor(), persistent=False)
 
     @staticmethod
     def _get_scalar(value) -> Union[float, int]:
@@ -52,12 +52,14 @@ class OnnxRange(nn.Module, OnnxToTorchModuleWithCustomExport):
             return self._arange(start, limit, delta)
 
         if torch.onnx.is_in_onnx_export():
-            return DefaultExportToOnnx.export(_forward, 'Range', start, limit, delta, {})
+            return DefaultExportToOnnx.export(
+                _forward, "Range", start, limit, delta, {}
+            )
 
         return _forward()
 
 
-@add_converter(operation_type='Range', version=11)
+@add_converter(operation_type="Range", version=11)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:
     del graph
     return OperationConverterResult(

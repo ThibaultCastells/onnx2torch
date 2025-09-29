@@ -10,15 +10,19 @@ from tests.utils.common import make_model_from_nodes
 
 
 def _test_dropout(data: np.ndarray, opset_version: int, **kwargs) -> None:
-    test_inputs = {'input_tensor': data}
+    test_inputs = {"input_tensor": data}
 
     if opset_version >= 12:
-        if 'ratio' in kwargs:
-            test_inputs['ratio'] = np.array(kwargs.pop('ratio'), dtype=np.float16)
-        if 'training_mode' in kwargs:
-            test_inputs['training_mode'] = np.array(kwargs.pop('training_mode'), dtype=bool)
+        if "ratio" in kwargs:
+            test_inputs["ratio"] = np.array(kwargs.pop("ratio"), dtype=np.float16)
+        if "training_mode" in kwargs:
+            test_inputs["training_mode"] = np.array(
+                kwargs.pop("training_mode"), dtype=bool
+            )
 
-    node = onnx.helper.make_node(op_type='Dropout', inputs=list(test_inputs), outputs=['y'], **kwargs)
+    node = onnx.helper.make_node(
+        op_type="Dropout", inputs=list(test_inputs), outputs=["y"], **kwargs
+    )
     model = make_model_from_nodes(
         nodes=node,
         initializers={},
@@ -30,7 +34,7 @@ def _test_dropout(data: np.ndarray, opset_version: int, **kwargs) -> None:
 
 
 @pytest.mark.parametrize(
-    'input_shape,ratio,training_mode,opset_version',
+    "input_shape,ratio,training_mode,opset_version",
     (
         ([3, 32, 32], None, None, 10),
         ([3, 32, 32], None, None, 12),
@@ -53,7 +57,7 @@ def test_dropout(  # pylint: disable=missing-function-docstring
     data = np.random.randn(*input_shape).astype(np.float32)
     kwargs = {}
     if ratio is not None:
-        kwargs['ratio'] = ratio
+        kwargs["ratio"] = ratio
     if training_mode is not None:
-        kwargs['training_mode'] = training_mode
+        kwargs["training_mode"] = training_mode
     _test_dropout(data=data, opset_version=opset_version, **kwargs)

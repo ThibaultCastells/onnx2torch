@@ -1,5 +1,5 @@
 __all__ = [
-    'OnnxLayerNorm',
+    "OnnxLayerNorm",
 ]
 
 from typing import Optional
@@ -43,12 +43,12 @@ class OnnxLayerNorm(nn.Module, OnnxToTorchModule):  # pylint: disable=missing-do
         )
 
 
-@add_converter(operation_type='LayerNormalization', version=17)
+@add_converter(operation_type="LayerNormalization", version=17)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:
     node_attributes = node.attributes
 
-    axis = node_attributes.get('axis', AXIS_DEFAULT_VALUE)
-    epsilon = node_attributes.get('epsilon', EPSILON_DEFAULT_VALUE)
+    axis = node_attributes.get("axis", AXIS_DEFAULT_VALUE)
+    epsilon = node_attributes.get("epsilon", EPSILON_DEFAULT_VALUE)
 
     if all(value_name in graph.initializers for value_name in node.input_values[1:]):
         input_value_info = graph.value_info[node.input_values[0]]
@@ -68,11 +68,15 @@ def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:
             if bias_value_name is not None:
                 torch_module.bias.data = graph.initializers[bias_value_name].to_torch()
 
-        onnx_mapping = OnnxMapping(inputs=(node.input_values[0],), outputs=node.output_values)
+        onnx_mapping = OnnxMapping(
+            inputs=(node.input_values[0],), outputs=node.output_values
+        )
     else:
         input_value_info = graph.value_info[node.input_values[0]]
         input_shape = get_shape_from_value_info(input_value_info)
         torch_module = OnnxLayerNorm(axis=axis, epsilon=epsilon)
         onnx_mapping = onnx_mapping_from_node(node)
 
-    return OperationConverterResult(torch_module=torch_module, onnx_mapping=onnx_mapping)
+    return OperationConverterResult(
+        torch_module=torch_module, onnx_mapping=onnx_mapping
+    )

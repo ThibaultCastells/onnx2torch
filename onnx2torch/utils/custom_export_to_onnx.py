@@ -1,7 +1,7 @@
 __all__ = [
-    'CustomExportToOnnx',
-    'DefaultExportToOnnx',
-    'OnnxToTorchModuleWithCustomExport',
+    "CustomExportToOnnx",
+    "DefaultExportToOnnx",
+    "OnnxToTorchModuleWithCustomExport",
 ]
 
 from typing import Any
@@ -60,7 +60,7 @@ class CustomExportToOnnx(torch.autograd.Function):
     def forward(ctx: Any, *args: Any, **kwargs: Any) -> Any:  # pylint: disable=unused-argument, arguments-differ
         """Applies custom forward function."""
         if CustomExportToOnnx._NEXT_FORWARD_FUNCTION is None:
-            raise RuntimeError('Forward function is not set')
+            raise RuntimeError("Forward function is not set")
 
         try:
             return CustomExportToOnnx._NEXT_FORWARD_FUNCTION()  # pylint: disable=not-callable
@@ -69,7 +69,7 @@ class CustomExportToOnnx(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx: Any, *grad_outputs: Any) -> Any:  # pylint: disable=unused-argument, missing-function-docstring
-        raise RuntimeError('Backward called while converting to ONNX')
+        raise RuntimeError("Backward called while converting to ONNX")
 
     @staticmethod
     def symbolic(graph: torch_C.Graph, *args) -> torch_C.Value:  # pylint: disable=unused-argument

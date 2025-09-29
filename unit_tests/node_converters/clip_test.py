@@ -15,23 +15,27 @@ def _test_clip(
     **kwargs,
 ) -> None:
     x_range = 2 * max_value if max_value is not None else 5
-    x = np.random.uniform(low=-x_range, high=x_range, size=input_shape).astype(np.float32)
-    test_inputs = {'x': x}
+    x = np.random.uniform(low=-x_range, high=x_range, size=input_shape).astype(
+        np.float32
+    )
+    test_inputs = {"x": x}
 
     initializers = {}
     if min_value is not None:
-        initializers['min'] = np.array(min_value, dtype=np.float32)
+        initializers["min"] = np.array(min_value, dtype=np.float32)
 
     if max_value is not None:
-        initializers['max'] = np.array(max_value, dtype=np.float32)
+        initializers["max"] = np.array(max_value, dtype=np.float32)
 
     node = onnx.helper.make_node(
-        op_type='Clip',
+        op_type="Clip",
         inputs=list(test_inputs) + list(initializers),
-        outputs=['y'],
+        outputs=["y"],
         **kwargs,
     )
-    model = make_model_from_nodes(nodes=node, initializers=initializers, inputs_example=test_inputs)
+    model = make_model_from_nodes(
+        nodes=node, initializers=initializers, inputs_example=test_inputs
+    )
     check_onnx_model(model, test_inputs)
 
 
@@ -40,15 +44,17 @@ def _test_clip_opset9(
     **kwargs,
 ) -> None:
     x = np.random.uniform(low=-10.0, high=10.0, size=input_shape).astype(np.float32)
-    test_inputs = {'x': x}
+    test_inputs = {"x": x}
 
     node = onnx.helper.make_node(
-        op_type='Clip',
+        op_type="Clip",
         inputs=list(test_inputs),
-        outputs=['y'],
+        outputs=["y"],
         **kwargs,
     )
-    model = make_model_from_nodes(nodes=node, initializers={}, inputs_example=test_inputs, opset_version=9)
+    model = make_model_from_nodes(
+        nodes=node, initializers={}, inputs_example=test_inputs, opset_version=9
+    )
     check_onnx_model(model, test_inputs)
 
 

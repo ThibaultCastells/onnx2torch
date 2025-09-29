@@ -13,12 +13,14 @@ from tests.utils.common import make_model_from_nodes
 def _test_mean(
     data_list: List[np.ndarray],
 ) -> None:
-    test_inputs = {f'data_{i}': data for i, data in enumerate(data_list)}
+    test_inputs = {f"data_{i}": data for i, data in enumerate(data_list)}
 
-    node = onnx.helper.make_node(op_type='Mean', inputs=list(test_inputs), outputs=['y'])
+    node = onnx.helper.make_node(
+        op_type="Mean", inputs=list(test_inputs), outputs=["y"]
+    )
     outputs_info = [
         make_tensor_value_info(
-            name='y',
+            name="y",
             elem_type=NP_TYPE_TO_TENSOR_TYPE[data_list[0].dtype],
             shape=None,
         ),
@@ -34,7 +36,7 @@ def _test_mean(
 
 
 @pytest.mark.parametrize(
-    'input_shapes',
+    "input_shapes",
     (
         ([],),
         ([2, 3, 4],),
@@ -43,5 +45,7 @@ def _test_mean(
     ),
 )
 def test_mean(input_shapes: List[List[int]]) -> None:  # pylint: disable=missing-function-docstring
-    input_tensors = [np.random.normal(size=i_shape).astype(np.float32) for i_shape in input_shapes]
+    input_tensors = [
+        np.random.normal(size=i_shape).astype(np.float32) for i_shape in input_shapes
+    ]
     _test_mean(data_list=input_tensors)

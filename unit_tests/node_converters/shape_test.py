@@ -16,16 +16,16 @@ def _test_shape(
     **kwargs,
 ) -> None:
     x = np.random.uniform(low=-1.0, high=1.0, size=input_shape).astype(np.float32)
-    test_inputs = {'x': x}
+    test_inputs = {"x": x}
 
     node = onnx.helper.make_node(
-        op_type='Shape',
+        op_type="Shape",
         inputs=list(test_inputs),
-        outputs=['y'],
+        outputs=["y"],
         **kwargs,
     )
-    onnx_type = NP_TYPE_TO_TENSOR_TYPE[np.dtype('int64')]
-    outputs_info = [make_tensor_value_info(name='y', elem_type=onnx_type, shape=None)]
+    onnx_type = NP_TYPE_TO_TENSOR_TYPE[np.dtype("int64")]
+    outputs_info = [make_tensor_value_info(name="y", elem_type=onnx_type, shape=None)]
     model = make_model_from_nodes(
         nodes=node,
         initializers={},
@@ -36,7 +36,7 @@ def _test_shape(
     check_onnx_model(model, test_inputs)
 
 
-@pytest.mark.filterwarnings('ignore::torch.jit._trace.TracerWarning')
+@pytest.mark.filterwarnings("ignore::torch.jit._trace.TracerWarning")
 def test_shape() -> None:  # pylint: disable=missing-function-docstring
     _test_shape(input_shape=[2, 3, 16, 16, 16], opset_version=9)
     _test_shape(input_shape=[2, 3, 16, 16], opset_version=9)

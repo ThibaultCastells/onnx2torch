@@ -13,23 +13,28 @@ def _test_scatter_nd(
     opset_version: int,
     **kwargs,
 ) -> None:
-    test_inputs = {'data': data, 'indices': indices, 'updates': updates}
+    test_inputs = {"data": data, "indices": indices, "updates": updates}
 
     node = onnx.helper.make_node(
-        op_type='ScatterND',
-        inputs=['data', 'indices', 'updates'],
-        outputs=['y'],
+        op_type="ScatterND",
+        inputs=["data", "indices", "updates"],
+        outputs=["y"],
         **kwargs,
     )
 
-    model = make_model_from_nodes(nodes=node, initializers={}, inputs_example=test_inputs, opset_version=opset_version)
+    model = make_model_from_nodes(
+        nodes=node,
+        initializers={},
+        inputs_example=test_inputs,
+        opset_version=opset_version,
+    )
     check_onnx_model(model, test_inputs, opset_version=opset_version)
 
 
-@pytest.mark.parametrize('opset_version', (11, 13, 14, 16))
-@pytest.mark.parametrize('reduction', ('none',))
+@pytest.mark.parametrize("opset_version", (11, 13, 14, 16))
+@pytest.mark.parametrize("reduction", ("none",))
 @pytest.mark.parametrize(
-    'data',
+    "data",
     (
         np.array(
             [
@@ -43,7 +48,7 @@ def _test_scatter_nd(
     ),
 )
 @pytest.mark.parametrize(
-    'indices, updates',
+    "indices, updates",
     (
         (
             np.array([[0, 1, 2], [1, 2, 3]], dtype=np.int64),
@@ -66,7 +71,11 @@ def _test_scatter_nd(
     ),
 )
 def test_scatter_nd(  # pylint: disable=missing-function-docstring
-    data: np.ndarray, indices: np.ndarray, updates: np.ndarray, opset_version: int, reduction: str
+    data: np.ndarray,
+    indices: np.ndarray,
+    updates: np.ndarray,
+    opset_version: int,
+    reduction: str,
 ) -> None:
     _test_scatter_nd(
         data=data,

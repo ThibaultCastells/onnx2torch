@@ -1,5 +1,5 @@
 __all__ = [
-    'OnnxMinMax',
+    "OnnxMinMax",
 ]
 
 import torch
@@ -14,8 +14,8 @@ from onnx2torch.utils.common import onnx_mapping_from_node
 
 class OnnxMinMax(OnnxBaseElementWise):  # pylint: disable=missing-docstring
     _OPERATORS = {
-        'Min': torch.amin,
-        'Max': torch.amax,
+        "Min": torch.amin,
+        "Max": torch.amax,
     }
 
     def __init__(self, op_type: str):
@@ -30,12 +30,12 @@ class OnnxMinMax(OnnxBaseElementWise):  # pylint: disable=missing-docstring
         return output
 
 
-@add_converter(operation_type='Min', version=8)
-@add_converter(operation_type='Min', version=12)
-@add_converter(operation_type='Min', version=13)
-@add_converter(operation_type='Max', version=8)
-@add_converter(operation_type='Max', version=12)
-@add_converter(operation_type='Max', version=13)
+@add_converter(operation_type="Min", version=8)
+@add_converter(operation_type="Min", version=12)
+@add_converter(operation_type="Min", version=13)
+@add_converter(operation_type="Max", version=8)
+@add_converter(operation_type="Max", version=12)
+@add_converter(operation_type="Max", version=13)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: disable=unused-argument
     return OperationConverterResult(
         torch_module=OnnxMinMax(node.operation_type),

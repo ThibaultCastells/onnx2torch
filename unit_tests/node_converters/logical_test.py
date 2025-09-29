@@ -7,8 +7,8 @@ from tests.utils.common import make_model_from_nodes
 
 
 @pytest.mark.parametrize(
-    'op_type',
-    ('Or', 'And', 'Xor'),
+    "op_type",
+    ("Or", "And", "Xor"),
 )
 def test_logical_operation(op_type: str) -> None:  # pylint: disable=missing-function-docstring
     x = np.random.randn(10, 1, 64, 128) > 0
@@ -20,12 +20,12 @@ def test_logical_operation(op_type: str) -> None:  # pylint: disable=missing-fun
         (np.random.randn(10, 1, 64, 128) > 0),
     )
     for y in y_variants:
-        test_inputs = {'x': x, 'y': y}
+        test_inputs = {"x": x, "y": y}
         initializers = {}
         node = onnx.helper.make_node(
             op_type=op_type,
-            inputs=['x', 'y'],
-            outputs=['z'],
+            inputs=["x", "y"],
+            outputs=["z"],
         )
 
         model = make_model_from_nodes(
@@ -45,13 +45,15 @@ def test_not() -> None:  # pylint: disable=missing-function-docstring
     )
 
     for x in x_variants:
-        test_inputs = {'x': x}
+        test_inputs = {"x": x}
         initializers = {}
         node = onnx.helper.make_node(
-            op_type='Not',
-            inputs=['x'],
-            outputs=['y'],
+            op_type="Not",
+            inputs=["x"],
+            outputs=["y"],
         )
 
-        model = make_model_from_nodes(nodes=node, initializers=initializers, inputs_example=test_inputs)
+        model = make_model_from_nodes(
+            nodes=node, initializers=initializers, inputs_example=test_inputs
+        )
         check_onnx_model(model, test_inputs)

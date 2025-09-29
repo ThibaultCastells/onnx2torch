@@ -1,7 +1,7 @@
 __all__ = [
-    'OnnxGather',
-    'OnnxGatherElements',
-    'OnnxGatherND',
+    "OnnxGather",
+    "OnnxGatherElements",
+    "OnnxGatherND",
 ]
 
 from typing import Any
@@ -46,7 +46,7 @@ class OnnxGather(nn.Module, OnnxToTorchModuleWithCustomExport):
         self._axis = axis
 
     def _onnx_attrs(self, opset_version: int) -> Dict[str, Any]:
-        return {'axis_i': self._axis}
+        return {"axis_i": self._axis}
 
     @staticmethod
     def slice_from_axis(  # pylint: disable=missing-docstring
@@ -71,7 +71,9 @@ class OnnxGather(nn.Module, OnnxToTorchModuleWithCustomExport):
 
         if torch.onnx.is_in_onnx_export():
             onnx_attrs = self._onnx_attrs(opset_version=get_onnx_version())
-            return DefaultExportToOnnx.export(_forward, 'Gather', input_tensor, indices, onnx_attrs)
+            return DefaultExportToOnnx.export(
+                _forward, "Gather", input_tensor, indices, onnx_attrs
+            )
 
         return _forward()
 
@@ -88,32 +90,42 @@ class OnnxGatherND(nn.Module, OnnxToTorchModuleWithCustomExport):
 
         if opset_version == 11:
             if self._batch_dims != 0:
-                raise ValueError(f'GatherND from opset 11 does not support batch_dims != 0, got {self._batch_dims}')
+                raise ValueError(
+                    f"GatherND from opset 11 does not support batch_dims != 0, got {self._batch_dims}"
+                )
             return onnx_attrs
 
-        onnx_attrs['batch_dims_i'] = self._batch_dims
+        onnx_attrs["batch_dims_i"] = self._batch_dims
         return onnx_attrs
 
-    def forward(self, input_tensor: torch.Tensor, indices: torch.Tensor) -> torch.Tensor:  # pylint: disable=C0116
+    def forward(
+        self, input_tensor: torch.Tensor, indices: torch.Tensor
+    ) -> torch.Tensor:  # pylint: disable=C0116
         def _forward():
-            return self._gather_nd(data=input_tensor, indices=indices, batch_dims=self._batch_dims)
+            return self._gather_nd(
+                data=input_tensor, indices=indices, batch_dims=self._batch_dims
+            )
 
         if torch.onnx.is_in_onnx_export():
             onnx_attrs = self._onnx_attrs(opset_version=get_onnx_version())
-            return DefaultExportToOnnx.export(_forward, 'GatherND', input_tensor, indices, onnx_attrs)
+            return DefaultExportToOnnx.export(
+                _forward, "GatherND", input_tensor, indices, onnx_attrs
+            )
 
         return _forward()
 
     @staticmethod
-    def _gather_nd(data: torch.Tensor, indices: torch.Tensor, batch_dims: int) -> torch.Tensor:
+    def _gather_nd(
+        data: torch.Tensor, indices: torch.Tensor, batch_dims: int
+    ) -> torch.Tensor:
         if batch_dims != 0:
-            raise NotImplementedError('GatherND for batch_dims != 0 is not implemented')
+            raise NotImplementedError("GatherND for batch_dims != 0 is not implemented")
 
         r, m = len(data.shape), indices.shape[-1]  # pylint: disable=C0103
         if m > r or m < 1:
             raise ValueError(
-                f'The last dimension of indices should have a value between 1 (inclusive) and data rank (inclusive), '
-                f'got {m} and {r} respectively'
+                f"The last dimension of indices should have a value between 1 (inclusive) and data rank (inclusive), "
+                f"got {m} and {r} respectively"
             )
 
         total_samples = indices.shape[:-1].numel()
@@ -127,11 +139,11 @@ class OnnxGatherND(nn.Module, OnnxToTorchModuleWithCustomExport):
         return data[indices_].reshape(output_shape).contiguous()
 
 
-@add_converter(operation_type='Gather', version=1)
-@add_converter(operation_type='Gather', version=11)
-@add_converter(operation_type='Gather', version=13)
+@add_converter(operation_type="Gather", version=1)
+@add_converter(operation_type="Gather", version=11)
+@add_converter(operation_type="Gather", version=13)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: disable=unused-argument
-    axis = node.attributes.get('axis', 0)
+    axis = node.attributes.get("axis", 0)
     torch_module = OnnxGather(
         axis=axis,
     )
@@ -142,10 +154,10 @@ def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: 
     )
 
 
-@add_converter(operation_type='GatherElements', version=11)
-@add_converter(operation_type='GatherElements', version=13)
+@add_converter(operation_type="GatherElements", version=11)
+@add_converter(operation_type="GatherElements", version=13)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: disable=unused-argument
-    axis = node.attributes.get('axis', 0)
+    axis = node.attributes.get("axis", 0)
     torch_module = OnnxGatherElements(
         axis=axis,
     )
@@ -156,11 +168,11 @@ def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: 
     )
 
 
-@add_converter(operation_type='GatherND', version=11)
-@add_converter(operation_type='GatherND', version=12)
-@add_converter(operation_type='GatherND', version=13)
+@add_converter(operation_type="GatherND", version=11)
+@add_converter(operation_type="GatherND", version=12)
+@add_converter(operation_type="GatherND", version=13)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: disable=unused-argument
-    batch_dims = node.attributes.get('batch_dims', 0)
+    batch_dims = node.attributes.get("batch_dims", 0)
     torch_module = OnnxGatherND(
         batch_dims=batch_dims,
     )

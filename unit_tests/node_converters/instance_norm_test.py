@@ -8,9 +8,9 @@ from tests.utils.common import check_onnx_model
 from tests.utils.common import make_model_from_nodes
 
 
-@pytest.mark.parametrize('parameters_as_inputs', (True, False))
+@pytest.mark.parametrize("parameters_as_inputs", (True, False))
 @pytest.mark.parametrize(
-    'input_shape',
+    "input_shape",
     (
         # 1d
         [2, 3, 16],
@@ -32,8 +32,8 @@ def test_instance_norm(  # pylint: disable=missing-function-docstring
     scale = np.random.uniform(low=0.0, high=1.0, size=num_features).astype(np.float32)
     bias = np.random.uniform(low=-1.0, high=1.0, size=num_features).astype(np.float32)
 
-    inputs = {'input': x}
-    parameters = {'scale': scale, 'bias': bias}
+    inputs = {"input": x}
+    parameters = {"scale": scale, "bias": bias}
     initializers = {}
 
     if parameters_as_inputs:
@@ -41,7 +41,18 @@ def test_instance_norm(  # pylint: disable=missing-function-docstring
     else:
         initializers.update(parameters)
 
-    node = onnx.helper.make_node(op_type='InstanceNormalization', inputs=['input', 'scale', 'bias'], outputs=['y'])
+    node = onnx.helper.make_node(
+        op_type="InstanceNormalization",
+        inputs=["input", "scale", "bias"],
+        outputs=["y"],
+    )
 
-    model = make_model_from_nodes(nodes=node, initializers=initializers, inputs_example=inputs)
-    check_onnx_model(onnx_model=model, onnx_inputs=inputs, atol_onnx_torch=1e-6, atol_torch_cpu_cuda=1e-6)
+    model = make_model_from_nodes(
+        nodes=node, initializers=initializers, inputs_example=inputs
+    )
+    check_onnx_model(
+        onnx_model=model,
+        onnx_inputs=inputs,
+        atol_onnx_torch=1e-6,
+        atol_torch_cpu_cuda=1e-6,
+    )

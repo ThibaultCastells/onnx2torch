@@ -12,20 +12,25 @@ def where_test(  # pylint: disable=missing-function-docstring
     x: np.ndarray,
     y: np.ndarray,
 ) -> None:
-    test_inputs = {'condition': condition, 'x': x, 'y': y}
+    test_inputs = {"condition": condition, "x": x, "y": y}
     node = onnx.helper.make_node(
-        op_type='Where',
+        op_type="Where",
         inputs=list(test_inputs),
-        outputs=['z'],
+        outputs=["z"],
     )
     outputs_info = [
         make_tensor_value_info(
-            name='z',
+            name="z",
             elem_type=NP_TYPE_TO_TENSOR_TYPE[x.dtype],
             shape=None,
         )
     ]
-    model = make_model_from_nodes(nodes=node, initializers={}, inputs_example=test_inputs, outputs_info=outputs_info)
+    model = make_model_from_nodes(
+        nodes=node,
+        initializers={},
+        inputs_example=test_inputs,
+        outputs_info=outputs_info,
+    )
     check_onnx_model(model, test_inputs)
 
 

@@ -16,7 +16,7 @@ def onnx_auto_pad_to_torch_padding(  # pylint: disable=missing-function-docstrin
     auto_pad: str,
     onnx_padding: Tuple[int, ...],
 ) -> Tuple[Union[int, Tuple[int, ...]], Optional[nn.Module]]:
-    if auto_pad == 'NOTSET':
+    if auto_pad == "NOTSET":
         if onnx_padding is None:
             return 0, None
 
@@ -26,10 +26,10 @@ def onnx_auto_pad_to_torch_padding(  # pylint: disable=missing-function-docstrin
 
         return 0, OnnxPadStatic.create_from_onnx_params(onnx_pads=onnx_padding)
 
-    if auto_pad == 'VALID':
+    if auto_pad == "VALID":
         return 0, None
 
-    if auto_pad in ('SAME_UPPER', 'SAME_LOWER'):
+    if auto_pad in ("SAME_UPPER", "SAME_LOWER"):
         raise NotImplementedError(f'"{auto_pad}" auto_pad is not implemented')
 
     raise ValueError(f'Got unexpected auto_pad value "{auto_pad}"')

@@ -14,13 +14,15 @@ def test_neg() -> None:  # pylint: disable=missing-function-docstring
     )
 
     for x in x_variants:
-        test_inputs = {'x': x}
+        test_inputs = {"x": x}
         initializers = {}
         node = onnx.helper.make_node(
-            op_type='Neg',
-            inputs=['x'],
-            outputs=['y'],
+            op_type="Neg",
+            inputs=["x"],
+            outputs=["y"],
         )
 
-        model = make_model_from_nodes(nodes=node, initializers=initializers, inputs_example=test_inputs)
+        model = make_model_from_nodes(
+            nodes=node, initializers=initializers, inputs_example=test_inputs
+        )
         check_onnx_model(model, test_inputs)

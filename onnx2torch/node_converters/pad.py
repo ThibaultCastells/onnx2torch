@@ -1,6 +1,6 @@
 __all__ = [
-    'OnnxPadStatic',
-    'OnnxPadDynamic',
+    "OnnxPadStatic",
+    "OnnxPadDynamic",
 ]
 
 from typing import List
@@ -21,9 +21,9 @@ from onnx2torch.utils.common import OperationConverterResult
 from onnx2torch.utils.common import onnx_mapping_from_node
 
 _ONNX_TO_TORCH_MODE = {
-    'constant': 'constant',
-    'reflect': 'reflect',
-    'edge': 'replicate',
+    "constant": "constant",
+    "reflect": "reflect",
+    "edge": "replicate",
 }
 
 
@@ -31,18 +31,18 @@ def _onnx_to_torch_mode(mode: str) -> str:
     try:
         return _ONNX_TO_TORCH_MODE[mode]
     except KeyError as exc:
-        raise NotImplementedError(f'{mode} mode is not implemented') from exc
+        raise NotImplementedError(f"{mode} mode is not implemented") from exc
 
 
 def _torch_padding_to_mode_format(pads: List[int], mode: str) -> List[int]:
-    if mode in ('replicate', 'reflect'):
+    if mode in ("replicate", "reflect"):
         batch_channel_pads = pads[-4:]
         if set(batch_channel_pads) == {0}:
             return pads[:-4]
 
         raise RuntimeError(
-            f'{mode} padding is implemented for padding the last 3 dimensions of 5D input tensor, '
-            f'or the last 2 dimensions of 4D input tensor, or the last dimension of 3D input tensor.'
+            f"{mode} padding is implemented for padding the last 3 dimensions of 5D input tensor, "
+            f"or the last 2 dimensions of 4D input tensor, or the last dimension of 3D input tensor."
         )
 
     return pads
@@ -66,7 +66,7 @@ class OnnxPadStatic(nn.Module, OnnxToTorchModule):  # pylint: disable=missing-cl
     def __init__(
         self,
         pads: Union[Tuple[int, ...], List[int]],
-        mode: str = 'constant',
+        mode: str = "constant",
         constant_value: float = 0.0,
     ):
         super().__init__()
@@ -78,9 +78,9 @@ class OnnxPadStatic(nn.Module, OnnxToTorchModule):  # pylint: disable=missing-cl
     def create_from_onnx_params(  # pylint: disable=missing-function-docstring
         cls,
         onnx_pads: Union[Tuple[int, ...], List[int]],
-        onnx_mode: str = 'constant',
+        onnx_mode: str = "constant",
         constant_value: float = 0.0,
-    ) -> 'OnnxPadStatic':
+    ) -> "OnnxPadStatic":
         torch_mode = _onnx_to_torch_mode(onnx_mode)
         torch_padding = _onnx_padding_to_torch(onnx_pads)
         torch_padding = _torch_padding_to_mode_format(torch_padding, torch_mode)
@@ -96,7 +96,7 @@ class OnnxPadStatic(nn.Module, OnnxToTorchModule):  # pylint: disable=missing-cl
 
 
 class OnnxPadDynamic(nn.Module, OnnxToTorchModule):  # pylint: disable=missing-class-docstring
-    def __init__(self, mode: str = 'constant'):
+    def __init__(self, mode: str = "constant"):
         super().__init__()
         self.mode = mode
 
@@ -112,10 +112,10 @@ class OnnxPadDynamic(nn.Module, OnnxToTorchModule):  # pylint: disable=missing-c
         return F.pad(input_tensor, mode=self.mode, pad=torch_pads, value=constant_value)  # pylint: disable=not-callable
 
 
-@add_converter(operation_type='Pad', version=11)
-@add_converter(operation_type='Pad', version=13)
+@add_converter(operation_type="Pad", version=11)
+@add_converter(operation_type="Pad", version=13)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: disable=unused-argument
-    mode = node.attributes.get('mode', 'constant')
+    mode = node.attributes.get("mode", "constant")
     mode = _onnx_to_torch_mode(mode)
 
     return OperationConverterResult(
@@ -127,12 +127,12 @@ def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: 
     )
 
 
-@add_converter(operation_type='Pad', version=2)
+@add_converter(operation_type="Pad", version=2)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: disable=unused-argument
     torch_module = OnnxPadStatic.create_from_onnx_params(
-        onnx_mode=node.attributes.get('mode', 'constant'),
-        onnx_pads=node.attributes.get('pads'),
-        constant_value=node.attributes.get('constant_value', 0.0),
+        onnx_mode=node.attributes.get("mode", "constant"),
+        onnx_pads=node.attributes.get("pads"),
+        constant_value=node.attributes.get("constant_value", 0.0),
     )
 
     return OperationConverterResult(

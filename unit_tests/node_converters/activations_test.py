@@ -12,9 +12,11 @@ from tests.utils.common import make_model_from_nodes
 def _test_activation(  # pylint: disable=missing-function-docstring
     activation: str, data: np.ndarray, opset_version, **kwargs
 ) -> None:
-    test_inputs = {'input_tensor': data}
+    test_inputs = {"input_tensor": data}
 
-    node = onnx.helper.make_node(op_type=activation, inputs=['input_tensor'], outputs=['y'], **kwargs)
+    node = onnx.helper.make_node(
+        op_type=activation, inputs=["input_tensor"], outputs=["y"], **kwargs
+    )
     model = make_model_from_nodes(
         nodes=node,
         initializers={},
@@ -31,21 +33,21 @@ def _test_activation(  # pylint: disable=missing-function-docstring
 
 
 @pytest.mark.parametrize(
-    'activation,input_shape,opset_version',
+    "activation,input_shape,opset_version",
     (
-        ('Erf', [8, 3, 32, 32], 11),
-        ('HardSigmoid', [8, 3, 32, 32], 11),
-        ('HardSwish', [8, 3, 32, 32], 14),
-        ('LeakyRelu', [8, 3, 32, 32], 11),
-        ('LeakyRelu', [8, 3, 32, 32], 16),
-        ('LogSoftmax', [8, 3, 32, 32], 11),
-        ('Softsign', [8, 3, 32, 32], 1),
-        ('Softplus', [8, 3, 32, 32], 1),
-        ('Relu', [8, 3, 32, 32], 11),
-        ('Elu', [8, 3, 32, 32], 6),
-        ('Celu', [8, 3, 32, 32], 12),
-        ('Selu', [8, 3, 32, 32], 6),
-        ('Sigmoid', [8, 3, 32, 32], 11),
+        ("Erf", [8, 3, 32, 32], 11),
+        ("HardSigmoid", [8, 3, 32, 32], 11),
+        ("HardSwish", [8, 3, 32, 32], 14),
+        ("LeakyRelu", [8, 3, 32, 32], 11),
+        ("LeakyRelu", [8, 3, 32, 32], 16),
+        ("LogSoftmax", [8, 3, 32, 32], 11),
+        ("Softsign", [8, 3, 32, 32], 1),
+        ("Softplus", [8, 3, 32, 32], 1),
+        ("Relu", [8, 3, 32, 32], 11),
+        ("Elu", [8, 3, 32, 32], 6),
+        ("Celu", [8, 3, 32, 32], 12),
+        ("Selu", [8, 3, 32, 32], 6),
+        ("Sigmoid", [8, 3, 32, 32], 11),
     ),
 )
 def test_common_activations(  # pylint: disable=missing-function-docstring
@@ -58,7 +60,7 @@ def test_common_activations(  # pylint: disable=missing-function-docstring
 
 
 @pytest.mark.parametrize(
-    'input_shape,axis,opset_version',
+    "input_shape,axis,opset_version",
     (
         ([8, 3, 32, 32], None, 9),
         ([8, 3, 32, 32], None, 11),
@@ -74,7 +76,7 @@ def test_common_activations(  # pylint: disable=missing-function-docstring
         ([8, 3, 32, 32], -1, 13),
     ),
 )
-@pytest.mark.parametrize('activation', ('Softmax', 'LogSoftmax'))
+@pytest.mark.parametrize("activation", ("Softmax", "LogSoftmax"))
 def test_softmax(  # pylint: disable=missing-function-docstring
     activation: str,
     input_shape: List[int],
@@ -89,11 +91,11 @@ def test_softmax(  # pylint: disable=missing-function-docstring
 
 
 @pytest.mark.parametrize(
-    'opset_version',
+    "opset_version",
     (7, 9, 11),
 )
 @pytest.mark.parametrize(
-    'input_shape,slope_shape',
+    "input_shape,slope_shape",
     (
         ([8, 3, 32, 32], [1, 1, 32]),
         ([8, 3, 32, 32], [1, 32, 32]),
@@ -108,9 +110,11 @@ def test_prelu(  # pylint: disable=missing-function-docstring
 ) -> None:
     data = np.random.randn(*input_shape).astype(np.float32)
     slope = np.random.randn(*slope_shape).astype(np.float32)
-    test_inputs = {'input_tensor': data, 'slope': slope}
+    test_inputs = {"input_tensor": data, "slope": slope}
 
-    node = onnx.helper.make_node(op_type='PRelu', inputs=['input_tensor', 'slope'], outputs=['y'])
+    node = onnx.helper.make_node(
+        op_type="PRelu", inputs=["input_tensor", "slope"], outputs=["y"]
+    )
     model = make_model_from_nodes(
         nodes=node,
         initializers={},

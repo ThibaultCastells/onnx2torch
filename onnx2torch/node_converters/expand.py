@@ -1,5 +1,5 @@
 __all__ = [
-    'OnnxExpand',
+    "OnnxExpand",
 ]
 
 import torch
@@ -21,16 +21,20 @@ class OnnxExpand(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: disab
         shape: torch.Tensor,
     ) -> torch.Tensor:
         def _forward():
-            return input_tensor * torch.ones(torch.Size(shape), dtype=input_tensor.dtype, device=input_tensor.device)
+            return input_tensor * torch.ones(
+                torch.Size(shape), dtype=input_tensor.dtype, device=input_tensor.device
+            )
 
         if torch.onnx.is_in_onnx_export():
-            return DefaultExportToOnnx.export(_forward, 'Expand', input_tensor, shape, {})
+            return DefaultExportToOnnx.export(
+                _forward, "Expand", input_tensor, shape, {}
+            )
 
         return _forward()
 
 
-@add_converter(operation_type='Expand', version=8)
-@add_converter(operation_type='Expand', version=13)
+@add_converter(operation_type="Expand", version=8)
+@add_converter(operation_type="Expand", version=13)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: disable=unused-argument
     return OperationConverterResult(
         torch_module=OnnxExpand(),

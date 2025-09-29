@@ -1,5 +1,5 @@
 __all__ = [
-    'OnnxScatterND',
+    "OnnxScatterND",
 ]
 
 from enum import Enum
@@ -29,9 +29,9 @@ class ReductionOnnxAttr(Enum):
     - `mul`: reduction using the multiplication operation.
     """
 
-    NONE = 'none'
-    ADD = 'add'
-    MUL = 'mul'
+    NONE = "none"
+    ADD = "add"
+    MUL = "mul"
 
 
 class OnnxScatterND(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: disable=missing-class-docstring
@@ -39,7 +39,9 @@ class OnnxScatterND(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: di
         super().__init__()
 
         if reduction != ReductionOnnxAttr.NONE:
-            raise NotImplementedError(f'ScatterND with reduction attribute "{reduction.value}" is not implemented')
+            raise NotImplementedError(
+                f'ScatterND with reduction attribute "{reduction.value}" is not implemented'
+            )
 
         self._reduction = reduction
 
@@ -49,13 +51,13 @@ class OnnxScatterND(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: di
         if opset_version < 16:
             if self._reduction != ReductionOnnxAttr.NONE:
                 raise ValueError(
-                    'ScatterND from opset < 16 does not support'
-                    f'reduction attribute != {ReductionOnnxAttr.NONE.value},'
-                    f'got {self._reduction.value}'
+                    "ScatterND from opset < 16 does not support"
+                    f"reduction attribute != {ReductionOnnxAttr.NONE.value},"
+                    f"got {self._reduction.value}"
                 )
             return onnx_attrs
 
-        onnx_attrs['reduction_s'] = self._reduction.value
+        onnx_attrs["reduction_s"] = self._reduction.value
         return onnx_attrs
 
     def forward(  # pylint: disable=missing-function-docstring
@@ -80,17 +82,19 @@ class OnnxScatterND(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: di
 
         if torch.onnx.is_in_onnx_export():
             onnx_attrs = self._onnx_attrs(opset_version=get_onnx_version())
-            return DefaultExportToOnnx.export(_forward, 'ScatterND', data, indices, updates, onnx_attrs)
+            return DefaultExportToOnnx.export(
+                _forward, "ScatterND", data, indices, updates, onnx_attrs
+            )
 
         return _forward()
 
 
-@add_converter(operation_type='ScatterND', version=11)
-@add_converter(operation_type='ScatterND', version=13)
-@add_converter(operation_type='ScatterND', version=16)
+@add_converter(operation_type="ScatterND", version=11)
+@add_converter(operation_type="ScatterND", version=13)
+@add_converter(operation_type="ScatterND", version=16)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: disable=unused-argument
     node_attributes = node.attributes
-    reduction = ReductionOnnxAttr(node_attributes.get('reduction', 'none'))
+    reduction = ReductionOnnxAttr(node_attributes.get("reduction", "none"))
     return OperationConverterResult(
         torch_module=OnnxScatterND(reduction=reduction),
         onnx_mapping=onnx_mapping_from_node(node=node),

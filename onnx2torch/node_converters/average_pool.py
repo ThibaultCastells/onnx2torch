@@ -17,9 +17,9 @@ _AVGPOOL_CLASS_FROM_SPATIAL_RANK = {
 }
 
 
-@add_converter(operation_type='AveragePool', version=7)
-@add_converter(operation_type='AveragePool', version=10)
-@add_converter(operation_type='AveragePool', version=11)
+@add_converter(operation_type="AveragePool", version=7)
+@add_converter(operation_type="AveragePool", version=10)
+@add_converter(operation_type="AveragePool", version=11)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:
     input_value_info = graph.value_info[node.input_values[0]]
     input_shape = get_shape_from_value_info(input_value_info)
@@ -29,23 +29,25 @@ def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:
         avgpool_class = _AVGPOOL_CLASS_FROM_SPATIAL_RANK[spatial_rank]
     except KeyError as exc:
         raise NotImplementedError(
-            f'Average pool operation with spatial rank == {spatial_rank} is not implemented'
+            f"Average pool operation with spatial rank == {spatial_rank} is not implemented"
         ) from exc
 
     node_attributes = node.attributes
     # required
-    kernel_shape = node_attributes['kernel_shape']
+    kernel_shape = node_attributes["kernel_shape"]
     # optional
-    ceil_mode = node_attributes.get('ceil_mode', 0)
-    strides = node_attributes.get('strides', 1)
-    count_include_pad = node_attributes.get('count_include_pad', 0)
+    ceil_mode = node_attributes.get("ceil_mode", 0)
+    strides = node_attributes.get("strides", 1)
+    count_include_pad = node_attributes.get("count_include_pad", 0)
 
     padding, padding_module = onnx_auto_pad_to_torch_padding(
-        onnx_padding=node_attributes.get('pads', [0] * spatial_rank * 2),
-        auto_pad=node_attributes.get('auto_pad', 'NOTSET'),
+        onnx_padding=node_attributes.get("pads", [0] * spatial_rank * 2),
+        auto_pad=node_attributes.get("auto_pad", "NOTSET"),
     )
     if padding_module is not None:
-        raise NotImplementedError('AvgPool with non symmetrical padding is not implemented.')
+        raise NotImplementedError(
+            "AvgPool with non symmetrical padding is not implemented."
+        )
 
     torch_module = avgpool_class(
         kernel_size=kernel_shape,

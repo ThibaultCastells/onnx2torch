@@ -1,5 +1,5 @@
 __all__ = [
-    'OnnxConstantOfShape',
+    "OnnxConstantOfShape",
 ]
 
 from typing import Optional
@@ -26,7 +26,7 @@ class OnnxConstantOfShape(nn.Module, OnnxToTorchModule):  # pylint: disable=miss
             raise ValueError('parameter "value" must be scalar')
 
         self.value: torch.Tensor
-        self.register_buffer('value', value)
+        self.register_buffer("value", value)
 
     def forward(self, shape: torch.Tensor) -> torch.Tensor:  # pylint: disable=missing-function-docstring
         fill_value = self.value.item()
@@ -39,12 +39,12 @@ class OnnxConstantOfShape(nn.Module, OnnxToTorchModule):  # pylint: disable=miss
         )
 
 
-@add_converter(operation_type='ConstantOfShape', version=9)
+@add_converter(operation_type="ConstantOfShape", version=9)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: disable=unused-argument
     node_attributes = node.attributes
 
-    if 'value' in node_attributes:
-        value = node_attributes['value'].to_torch()
+    if "value" in node_attributes:
+        value = node_attributes["value"].to_torch()
     else:
         value = None
 

@@ -17,19 +17,21 @@ def _test_concat(
 ) -> None:
     test_inputs = {}
     for index, input_array_shape in enumerate(input_arrays_shapes):
-        x = np.random.uniform(low=-1.0, high=1.0, size=input_array_shape).astype(np.float32)
-        node_name = f'x_{index}'
+        x = np.random.uniform(low=-1.0, high=1.0, size=input_array_shape).astype(
+            np.float32
+        )
+        node_name = f"x_{index}"
         test_inputs[node_name] = x
 
     node = onnx.helper.make_node(
-        'Concat',
+        "Concat",
         inputs=list(test_inputs),
-        outputs=['y'],
+        outputs=["y"],
         **kwargs,
     )
 
-    onnx_type = NP_TYPE_TO_TENSOR_TYPE[np.dtype('float32')]
-    outputs_info = [make_tensor_value_info(name='y', elem_type=onnx_type, shape=None)]
+    onnx_type = NP_TYPE_TO_TENSOR_TYPE[np.dtype("float32")]
+    outputs_info = [make_tensor_value_info(name="y", elem_type=onnx_type, shape=None)]
     model = make_model_from_nodes(
         nodes=node,
         initializers={},

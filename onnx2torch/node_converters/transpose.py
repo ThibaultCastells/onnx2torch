@@ -1,5 +1,5 @@
 __all__ = [
-    'OnnxTranspose',
+    "OnnxTranspose",
 ]
 
 from typing import List
@@ -28,8 +28,8 @@ class OnnxTranspose(nn.Module, OnnxToTorchModule):  # pylint: disable=missing-cl
         return input_tensor.permute(self.perm)
 
 
-@add_converter(operation_type='Transpose', version=1)
-@add_converter(operation_type='Transpose', version=13)
+@add_converter(operation_type="Transpose", version=1)
+@add_converter(operation_type="Transpose", version=13)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: disable=unused-argument
     input_values = [node.input_values[0]]
     perm_value_name = node.input_values[1] if len(node.input_values) > 1 else None
@@ -37,7 +37,7 @@ def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: 
     if perm_value_name is not None:
         perm = graph.initializers[perm_value_name].to_torch().tolist()
     else:
-        perm = node.attributes.get('perm', None)
+        perm = node.attributes.get("perm", None)
         if perm is not None:
             perm = torch.tensor(perm, dtype=torch.long).tolist()
 

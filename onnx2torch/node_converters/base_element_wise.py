@@ -31,6 +31,8 @@ class OnnxBaseElementWise(nn.Module, OnnxToTorchModuleWithCustomExport):
             return self.apply_reduction(*input_tensors)
 
         if torch.onnx.is_in_onnx_export():
-            return DefaultExportToOnnx.export(_forward, self._op_type, *input_tensors, {})
+            return DefaultExportToOnnx.export(
+                _forward, self._op_type, *input_tensors, {}
+            )
 
         return _forward()

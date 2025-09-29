@@ -44,7 +44,7 @@ def onnx_dtype_to_torch_dtype(dtype: int) -> Union[torch.dtype, Type[str], Type[
     try:
         return _dtypes[dtype]
     except KeyError as exc:
-        raise ValueError(f'dtype={dtype} is not supported') from exc
+        raise ValueError(f"dtype={dtype} is not supported") from exc
 
 
 def onnx_dtype_to_numpy_dtype(dtype: int) -> Union[np.dtype, Type[str], Type[bool]]:
@@ -84,4 +84,4 @@ def onnx_dtype_to_numpy_dtype(dtype: int) -> Union[np.dtype, Type[str], Type[boo
     try:
         return _dtypes[dtype]
     except KeyError as exc:
-        raise ValueError(f'dtype={dtype} is not supported') from exc
+        raise ValueError(f"dtype={dtype} is not supported") from exc

@@ -14,10 +14,10 @@ class OnnxCopyIdentity(nn.Module, OnnxToTorchModule):  # pylint: disable=missing
         return x.clone()
 
 
-@add_converter(operation_type='Identity', version=16)
-@add_converter(operation_type='Identity', version=14)
-@add_converter(operation_type='Identity', version=13)
-@add_converter(operation_type='Identity', version=1)
+@add_converter(operation_type="Identity", version=16)
+@add_converter(operation_type="Identity", version=14)
+@add_converter(operation_type="Identity", version=13)
+@add_converter(operation_type="Identity", version=1)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: disable=unused-argument
     # We need copy identity because in onnx identity create new tensor.
     # Pytorch identity simply returns the same tensor.

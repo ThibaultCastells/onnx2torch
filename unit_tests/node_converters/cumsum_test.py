@@ -14,18 +14,18 @@ def _test_cumsum(
     exclusive: int,
     reverse: int,
 ) -> None:
-    test_inputs = {'x': input_tensor, 'axis': np.array(axis)}
+    test_inputs = {"x": input_tensor, "axis": np.array(axis)}
     node = onnx.helper.make_node(
-        op_type='CumSum',
+        op_type="CumSum",
         inputs=list(test_inputs.keys()),
-        outputs=['y'],
+        outputs=["y"],
         exclusive=exclusive,
         reverse=reverse,
     )
 
     outputs_info = [
         make_tensor_value_info(
-            name='y',
+            name="y",
             elem_type=NP_TYPE_TO_TENSOR_TYPE[input_tensor.dtype],
             shape=input_tensor.shape,
         ),
@@ -40,7 +40,7 @@ def _test_cumsum(
 
 
 @pytest.mark.parametrize(
-    'tensor_size',
+    "tensor_size",
     (
         (10,),
         (10, 10),
@@ -49,7 +49,7 @@ def _test_cumsum(
     ),
 )
 @pytest.mark.parametrize(
-    'exclusive,reverse',
+    "exclusive,reverse",
     (
         (0, 0),
         (0, 1),

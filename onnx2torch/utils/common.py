@@ -39,7 +39,7 @@ def onnx_mapping_from_node(node: OnnxNode) -> OnnxMapping:  # pylint: disable=mi
 
 def get_onnx_version() -> int:
     """Returns opset version at the time of the export."""
-    if hasattr(symbolic_helper, 'GLOBALS'):
+    if hasattr(symbolic_helper, "GLOBALS"):
         return symbolic_helper.GLOBALS.export_onnx_opset_version
 
     return symbolic_helper._export_onnx_opset_version  # pylint: disable=no-member, protected-access
@@ -61,9 +61,9 @@ def get_const_value(  # pylint: disable=missing-function-docstring
     except KeyError as exc:
         raise KeyError(f'Tensor "{name}" is not found in constant values') from exc
 
-    if node.operation_type == 'Constant':
+    if node.operation_type == "Constant":
         attr_name, attr_value = next(iter(node.attributes.items()))
-        if attr_name == 'value':
+        if attr_name == "value":
             attr_value = attr_value.to_torch()
 
         return attr_value

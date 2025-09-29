@@ -1,6 +1,6 @@
 # pylint: disable=missing-docstring
 __all__ = [
-    'OnnxTile',
+    "OnnxTile",
 ]
 
 import torch
@@ -16,18 +16,22 @@ from onnx2torch.utils.custom_export_to_onnx import OnnxToTorchModuleWithCustomEx
 
 
 class OnnxTile(nn.Module, OnnxToTorchModuleWithCustomExport):
-    def forward(self, input_tensor: torch.Tensor, repeats: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, input_tensor: torch.Tensor, repeats: torch.Tensor
+    ) -> torch.Tensor:
         def _forward() -> torch.Tensor:
             return input_tensor.repeat(torch.Size(repeats))
 
         if torch.onnx.is_in_onnx_export():
-            return DefaultExportToOnnx.export(_forward, 'Tile', input_tensor, repeats, {})
+            return DefaultExportToOnnx.export(
+                _forward, "Tile", input_tensor, repeats, {}
+            )
 
         return _forward()
 
 
-@add_converter(operation_type='Tile', version=6)
-@add_converter(operation_type='Tile', version=13)
+@add_converter(operation_type="Tile", version=6)
+@add_converter(operation_type="Tile", version=13)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:
     del graph
     return OperationConverterResult(

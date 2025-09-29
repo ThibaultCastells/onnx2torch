@@ -33,14 +33,20 @@ def safe_shape_inference(  # pylint: disable=missing-function-docstring
             return infer_shapes(onnx_model_or_path, **kwargs)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            tmp_model_path = Path(tmp_dir) / 'model.onnx'
+            tmp_model_path = Path(tmp_dir) / "model.onnx"
             onnx.save_model(
                 proto=onnx_model_or_path,
                 f=str(tmp_model_path),
                 save_as_external_data=True,
                 all_tensors_to_one_file=True,
             )
-            return _shape_inference_by_model_path(tmp_model_path, output_path=tmp_model_path, **kwargs)
+            return _shape_inference_by_model_path(
+                tmp_model_path, output_path=tmp_model_path, **kwargs
+            )
 
-    with tempfile.NamedTemporaryFile(dir=Path(onnx_model_or_path).parent) as tmp_model_file:
-        return _shape_inference_by_model_path(onnx_model_or_path, output_path=tmp_model_file.name, **kwargs)
+    with tempfile.NamedTemporaryFile(
+        dir=Path(onnx_model_or_path).parent
+    ) as tmp_model_file:
+        return _shape_inference_by_model_path(
+            onnx_model_or_path, output_path=tmp_model_file.name, **kwargs
+        )

@@ -37,7 +37,7 @@ def add_converter(  # pylint: disable=missing-function-docstring
             raise ValueError(f'Operation "{description}" already registered')
 
         _CONVERTER_REGISTRY[description] = converter
-        _LOGGER.debug(f'Operation converter registered {description}')
+        _LOGGER.debug(f"Operation converter registered {description}")
 
         return converter
 
@@ -66,6 +66,6 @@ def get_converter(  # pylint: disable=missing-function-docstring
 
     converter = _CONVERTER_REGISTRY.get(description, None)
     if converter is None:
-        raise NotImplementedError(f'Converter is not implemented ({description})')
+        raise NotImplementedError(f"Converter is not implemented ({description})")
 
     return converter

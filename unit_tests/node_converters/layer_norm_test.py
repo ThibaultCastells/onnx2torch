@@ -17,10 +17,10 @@ def _test_layer_norm(
     axis: int,
     parameters_as_inputs: bool,
 ) -> None:
-    inputs = {'input': x}
-    parameters = {'scale': scale}
+    inputs = {"input": x}
+    parameters = {"scale": scale}
     if bias is not None:
-        parameters['bias'] = bias
+        parameters["bias"] = bias
 
     initializers = {}
 
@@ -30,12 +30,14 @@ def _test_layer_norm(
         initializers.update(parameters)
 
     node = onnx.helper.make_node(
-        op_type='LayerNormalization',
-        inputs=['input', 'scale', 'bias'] if bias is not None else ['input', 'scale'],
-        outputs=['y'],
+        op_type="LayerNormalization",
+        inputs=["input", "scale", "bias"] if bias is not None else ["input", "scale"],
+        outputs=["y"],
         axis=axis,
     )
-    model = make_model_from_nodes(nodes=node, initializers=initializers, inputs_example=inputs, opset_version=17)
+    model = make_model_from_nodes(
+        nodes=node, initializers=initializers, inputs_example=inputs, opset_version=17
+    )
     check_onnx_model(
         onnx_model=model,
         onnx_inputs=inputs,
@@ -45,9 +47,9 @@ def _test_layer_norm(
     )
 
 
-@pytest.mark.parametrize('parameters_as_inputs', (True, False))
+@pytest.mark.parametrize("parameters_as_inputs", (True, False))
 @pytest.mark.parametrize(
-    'input_shape',
+    "input_shape",
     (
         [2, 3, 16],
         [3, 1, 224],

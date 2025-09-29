@@ -1,5 +1,5 @@
 __all__ = [
-    'OnnxReshape',
+    "OnnxReshape",
 ]
 
 import torch
@@ -18,7 +18,10 @@ class OnnxReshape(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: disa
     @staticmethod
     def _do_reshape(input_tensor: torch.Tensor, shape: torch.Tensor) -> torch.Tensor:
         if torch.any(shape == 0):
-            shape = [input_tensor.shape[i] if dim_size == 0 else dim_size for i, dim_size in enumerate(shape)]
+            shape = [
+                input_tensor.shape[i] if dim_size == 0 else dim_size
+                for i, dim_size in enumerate(shape)
+            ]
 
         return torch.reshape(input_tensor, torch.Size(shape))
 
@@ -31,16 +34,18 @@ class OnnxReshape(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: disa
             return self._do_reshape(input_tensor, shape)
 
         if torch.onnx.is_in_onnx_export():
-            return DefaultExportToOnnx.export(_forward, 'Reshape', input_tensor, shape, {})
+            return DefaultExportToOnnx.export(
+                _forward, "Reshape", input_tensor, shape, {}
+            )
 
         return _forward()
 
 
-@add_converter(operation_type='Reshape', version=5)
-@add_converter(operation_type='Reshape', version=13)
-@add_converter(operation_type='Reshape', version=14)
+@add_converter(operation_type="Reshape", version=5)
+@add_converter(operation_type="Reshape", version=13)
+@add_converter(operation_type="Reshape", version=14)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: disable=unused-argument
-    if node.attributes.get('allowzero', 0) == 1:
+    if node.attributes.get("allowzero", 0) == 1:
         raise NotImplementedError('"allowzero=1" is not implemented')
 
     return OperationConverterResult(

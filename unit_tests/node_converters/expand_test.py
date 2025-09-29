@@ -15,14 +15,16 @@ def _test_expand(
     shape: List[int],
 ) -> None:
     test_inputs = {
-        'x': data,
-        'shape': np.array(shape, dtype=np.int64),
+        "x": data,
+        "shape": np.array(shape, dtype=np.int64),
     }
 
-    node = onnx.helper.make_node(op_type='Expand', inputs=list(test_inputs), outputs=['y'])
+    node = onnx.helper.make_node(
+        op_type="Expand", inputs=list(test_inputs), outputs=["y"]
+    )
     outputs_info = [
         make_tensor_value_info(
-            name='y',
+            name="y",
             elem_type=NP_TYPE_TO_TENSOR_TYPE[data.dtype],
             shape=[None] * len(shape),
         ),
@@ -38,7 +40,7 @@ def _test_expand(
 
 
 @pytest.mark.parametrize(
-    'src_shape,dst_shape',
+    "src_shape,dst_shape",
     (
         ([3, 1], [2, 1, 6]),
         ([3, 1], [3, 4]),

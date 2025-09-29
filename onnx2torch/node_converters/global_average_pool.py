@@ -1,7 +1,7 @@
 # pylint: disable=missing-docstring
 __all__ = [
-    'OnnxGlobalAveragePool',
-    'OnnxGlobalAveragePoolWithKnownInputShape',
+    "OnnxGlobalAveragePool",
+    "OnnxGlobalAveragePoolWithKnownInputShape",
 ]
 
 from typing import List
@@ -26,12 +26,16 @@ class OnnxGlobalAveragePool(nn.Module, OnnxToTorchModuleWithCustomExport):
             return torch.mean(input_tensor, dim=x_dims, keepdim=True)
 
         if torch.onnx.is_in_onnx_export():
-            return DefaultExportToOnnx.export(_forward, 'GlobalAveragePool', input_tensor, {})
+            return DefaultExportToOnnx.export(
+                _forward, "GlobalAveragePool", input_tensor, {}
+            )
 
         return _forward()
 
 
-class OnnxGlobalAveragePoolWithKnownInputShape(nn.Module, OnnxToTorchModuleWithCustomExport):
+class OnnxGlobalAveragePoolWithKnownInputShape(
+    nn.Module, OnnxToTorchModuleWithCustomExport
+):
     def __init__(self, input_shape: List[int]):
         super().__init__()
         self._x_dims = list(range(2, len(input_shape)))
@@ -41,12 +45,14 @@ class OnnxGlobalAveragePoolWithKnownInputShape(nn.Module, OnnxToTorchModuleWithC
             return torch.mean(input_tensor, dim=self._x_dims, keepdim=True)
 
         if torch.onnx.is_in_onnx_export():
-            return DefaultExportToOnnx.export(_forward, 'GlobalAveragePool', input_tensor, {})
+            return DefaultExportToOnnx.export(
+                _forward, "GlobalAveragePool", input_tensor, {}
+            )
 
         return _forward()
 
 
-@add_converter(operation_type='GlobalAveragePool', version=1)
+@add_converter(operation_type="GlobalAveragePool", version=1)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:
     input_value_info = graph.value_info[node.input_values[0]]
     input_shape = get_shape_from_value_info(input_value_info)

@@ -9,11 +9,11 @@ from tests.utils.common import make_model_from_nodes
 
 
 @pytest.mark.parametrize(
-    'parameters_as_inputs',
+    "parameters_as_inputs",
     (True, False),
 )
 @pytest.mark.parametrize(
-    'input_shape',
+    "input_shape",
     (
         # 1d
         [2, 3, 16],
@@ -37,13 +37,13 @@ def test_batch_norm(  # pylint: disable=missing-function-docstring
     mean = np.random.uniform(low=-1.0, high=1.0, size=num_features).astype(np.float32)
     var = np.random.uniform(low=0.001, high=0.5, size=num_features).astype(np.float32)
 
-    test_inputs = {'x': x}
+    test_inputs = {"x": x}
     initializers = {}
     parameters = {
-        'scale': scale,
-        'bias': bias,
-        'mean': mean,
-        'var': var,
+        "scale": scale,
+        "bias": bias,
+        "mean": mean,
+        "var": var,
     }
     if parameters_as_inputs:
         initializers.update(parameters)
@@ -51,12 +51,14 @@ def test_batch_norm(  # pylint: disable=missing-function-docstring
         test_inputs.update(parameters)
 
     node = onnx.helper.make_node(
-        op_type='BatchNormalization',
-        inputs=['x', 'scale', 'bias', 'mean', 'var'],
-        outputs=['y'],
+        op_type="BatchNormalization",
+        inputs=["x", "scale", "bias", "mean", "var"],
+        outputs=["y"],
     )
 
-    model = make_model_from_nodes(nodes=node, initializers=initializers, inputs_example=test_inputs)
+    model = make_model_from_nodes(
+        nodes=node, initializers=initializers, inputs_example=test_inputs
+    )
     check_onnx_model(
         model,
         test_inputs,

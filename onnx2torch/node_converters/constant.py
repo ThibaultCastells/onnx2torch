@@ -1,5 +1,5 @@
 __all__ = [
-    'OnnxConstant',
+    "OnnxConstant",
 ]
 
 from typing import Any
@@ -15,13 +15,13 @@ from onnx2torch.utils.common import OperationConverterResult
 from onnx2torch.utils.common import onnx_mapping_from_node
 
 _CONSTANT_PARSING_MAPPING = {
-    'value': lambda x: x.to_torch(),
-    'value_float': torch.tensor,
-    'value_floats': torch.tensor,
-    'value_int': torch.tensor,
-    'value_ints': torch.tensor,
-    'value_string': lambda x: x,
-    'value_strings': lambda x: x,
+    "value": lambda x: x.to_torch(),
+    "value_float": torch.tensor,
+    "value_floats": torch.tensor,
+    "value_int": torch.tensor,
+    "value_ints": torch.tensor,
+    "value_string": lambda x: x,
+    "value_strings": lambda x: x,
 }
 
 
@@ -30,7 +30,7 @@ class OnnxConstant(nn.Module, OnnxToTorchModule):  # pylint: disable=missing-doc
         super().__init__()
         # We need it for placing constant to cuda.
         if isinstance(value, torch.Tensor):
-            self.register_buffer('value', value)
+            self.register_buffer("value", value)
         else:
             self.value = value
 
@@ -45,10 +45,10 @@ def _prepare_output_value(value: Any, attr_name: str) -> Any:
     raise NotImplementedError(f'value type "{attr_name}" not supported yet.')
 
 
-@add_converter(operation_type='Constant', version=9)
-@add_converter(operation_type='Constant', version=11)
-@add_converter(operation_type='Constant', version=12)
-@add_converter(operation_type='Constant', version=13)
+@add_converter(operation_type="Constant", version=9)
+@add_converter(operation_type="Constant", version=11)
+@add_converter(operation_type="Constant", version=12)
+@add_converter(operation_type="Constant", version=13)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: disable=unused-argument
     attr_name, value = list(node.attributes.items())[0]
     prepared_value = _prepare_output_value(value, attr_name)

@@ -1,6 +1,6 @@
 __all__ = [
-    'OnnxSplit',
-    'OnnxSplit13',
+    "OnnxSplit",
+    "OnnxSplit13",
 ]
 
 from typing import List
@@ -39,7 +39,9 @@ class OnnxSplit13(nn.Module, OnnxToTorchModule):  # pylint: disable=missing-clas
 
 
 class OnnxSplit(nn.Module, OnnxToTorchModule):  # pylint: disable=missing-class-docstring
-    def __init__(self, num_splits: int, axis: int = 0, split: Optional[List[int]] = None):
+    def __init__(
+        self, num_splits: int, axis: int = 0, split: Optional[List[int]] = None
+    ):
         super().__init__()
 
         self.axis = axis
@@ -56,9 +58,9 @@ class OnnxSplit(nn.Module, OnnxToTorchModule):  # pylint: disable=missing-class-
         return torch.split(input_tensor, split_size_or_sections, dim=self.axis)
 
 
-@add_converter(operation_type='Split', version=13)
+@add_converter(operation_type="Split", version=13)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: disable=unused-argument
-    axis = node.attributes.get('axis', 0)
+    axis = node.attributes.get("axis", 0)
     num_splits = len(node.output_values)
     return OperationConverterResult(
         torch_module=OnnxSplit13(axis=axis, num_splits=num_splits),
@@ -66,11 +68,11 @@ def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: 
     )
 
 
-@add_converter(operation_type='Split', version=11)
-@add_converter(operation_type='Split', version=2)
+@add_converter(operation_type="Split", version=11)
+@add_converter(operation_type="Split", version=2)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: disable=unused-argument
-    axis = node.attributes.get('axis', 0)
-    split = node.attributes.get('split', None)
+    axis = node.attributes.get("axis", 0)
+    split = node.attributes.get("split", None)
     num_splits = len(node.output_values)
     return OperationConverterResult(
         torch_module=OnnxSplit(axis=axis, split=split, num_splits=num_splits),

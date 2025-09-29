@@ -150,16 +150,16 @@ def _test_roi(
     opset_version: int,
     **kwargs,
 ) -> None:
-    test_inputs = {'X': input_tensor, 'rois': rois, 'batch_indices': batch_indices}
+    test_inputs = {"X": input_tensor, "rois": rois, "batch_indices": batch_indices}
 
     node = onnx.helper.make_node(
-        op_type='RoiAlign',
+        op_type="RoiAlign",
         inputs=list(test_inputs),
-        outputs=['y'],
+        outputs=["y"],
         **kwargs,
     )
-    onnx_type = NP_TYPE_TO_TENSOR_TYPE[np.dtype('float32')]
-    outputs_info = [make_tensor_value_info(name='y', elem_type=onnx_type, shape=None)]
+    onnx_type = NP_TYPE_TO_TENSOR_TYPE[np.dtype("float32")]
+    outputs_info = [make_tensor_value_info(name="y", elem_type=onnx_type, shape=None)]
     model = make_model_from_nodes(
         nodes=node,
         initializers={},
@@ -174,11 +174,13 @@ def _test_roi(
     )
 
 
-@pytest.mark.parametrize('opset_version', (10, 13, 16))
-@pytest.mark.parametrize('coordinate_transformation_mode', ('half_pixel', 'output_half_pixel'))
-@pytest.mark.parametrize('mode', ('avg',))
+@pytest.mark.parametrize("opset_version", (10, 13, 16))
 @pytest.mark.parametrize(
-    'spatial_scale,sampling_ratio,output_height,output_width',
+    "coordinate_transformation_mode", ("half_pixel", "output_half_pixel")
+)
+@pytest.mark.parametrize("mode", ("avg",))
+@pytest.mark.parametrize(
+    "spatial_scale,sampling_ratio,output_height,output_width",
     (
         (1.0, 2, 5, 5),
         (0.25, 0, 7, 7),
@@ -187,7 +189,7 @@ def _test_roi(
         (None, None, None, None),
     ),
 )
-@pytest.mark.filterwarnings('ignore::torch.jit._trace.TracerWarning')
+@pytest.mark.filterwarnings("ignore::torch.jit._trace.TracerWarning")
 def test_roi(  # pylint: disable=missing-function-docstring
     coordinate_transformation_mode: str,
     mode: str,
@@ -200,19 +202,21 @@ def test_roi(  # pylint: disable=missing-function-docstring
     x, batch_indices, rois = get_roi_align_input_values()
     kwargs = {}
     if spatial_scale is not None:
-        kwargs['spatial_scale'] = spatial_scale
+        kwargs["spatial_scale"] = spatial_scale
     if sampling_ratio is not None:
-        kwargs['sampling_ratio'] = sampling_ratio
+        kwargs["sampling_ratio"] = sampling_ratio
     if output_height is not None:
-        kwargs['output_height'] = output_height
+        kwargs["output_height"] = output_height
     if output_width is not None:
-        kwargs['output_width'] = output_width
+        kwargs["output_width"] = output_width
     _test_roi(
         input_tensor=x,
         rois=rois,
         batch_indices=batch_indices,
         opset_version=opset_version,
         mode=mode,
-        coordinate_transformation_mode=coordinate_transformation_mode if opset_version >= 16 else None,
+        coordinate_transformation_mode=coordinate_transformation_mode
+        if opset_version >= 16
+        else None,
         **kwargs,
     )

@@ -1,5 +1,5 @@
 __all__ = [
-    'OnnxRound',
+    "OnnxRound",
 ]
 
 import torch
@@ -13,9 +13,9 @@ from onnx2torch.utils.common import OperationConverterResult
 from onnx2torch.utils.common import onnx_mapping_from_node
 
 _TORCH_ROUND_FROM_ONNX_TYPE = {
-    'Ceil': torch.ceil,
-    'Floor': torch.floor,
-    'Round': torch.round,
+    "Ceil": torch.ceil,
+    "Floor": torch.floor,
+    "Round": torch.round,
 }
 
 
@@ -28,11 +28,11 @@ class OnnxRound(nn.Module, OnnxToTorchModule):  # pylint: disable=missing-class-
         return self.round_function(input_tensor)
 
 
-@add_converter(operation_type='Ceil', version=13)
-@add_converter(operation_type='Ceil', version=6)
-@add_converter(operation_type='Floor', version=13)
-@add_converter(operation_type='Floor', version=6)
-@add_converter(operation_type='Round', version=11)
+@add_converter(operation_type="Ceil", version=13)
+@add_converter(operation_type="Ceil", version=6)
+@add_converter(operation_type="Floor", version=13)
+@add_converter(operation_type="Floor", version=6)
+@add_converter(operation_type="Round", version=11)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: disable=unused-argument
     return OperationConverterResult(
         torch_module=OnnxRound(node.operation_type),

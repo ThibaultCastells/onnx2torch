@@ -1,5 +1,5 @@
 __all__ = [
-    'OnnxNeg',
+    "OnnxNeg",
 ]
 
 import torch
@@ -18,9 +18,9 @@ class OnnxNeg(nn.Module, OnnxToTorchModule):  # pylint: disable=missing-class-do
         return -input_tensor
 
 
-@add_converter(operation_type='Neg', version=1)
-@add_converter(operation_type='Neg', version=6)
-@add_converter(operation_type='Neg', version=13)
+@add_converter(operation_type="Neg", version=1)
+@add_converter(operation_type="Neg", version=6)
+@add_converter(operation_type="Neg", version=13)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: disable=unused-argument
     return OperationConverterResult(
         torch_module=OnnxNeg(),

@@ -1,5 +1,5 @@
 __all__ = [
-    'OnnxReciprocal',
+    "OnnxReciprocal",
 ]
 
 import torch
@@ -18,9 +18,9 @@ class OnnxReciprocal(nn.Module, OnnxToTorchModule):  # pylint: disable=missing-c
         return torch.reciprocal(x)
 
 
-@add_converter(operation_type='Reciprocal', version=1)
-@add_converter(operation_type='Reciprocal', version=6)
-@add_converter(operation_type='Reciprocal', version=13)
+@add_converter(operation_type="Reciprocal", version=1)
+@add_converter(operation_type="Reciprocal", version=6)
+@add_converter(operation_type="Reciprocal", version=13)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: disable=unused-argument
     return OperationConverterResult(
         torch_module=OnnxReciprocal(),

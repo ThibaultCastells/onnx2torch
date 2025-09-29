@@ -1,5 +1,5 @@
 __all__ = [
-    'OnnxShape',
+    "OnnxShape",
 ]
 
 from typing import Any
@@ -28,14 +28,18 @@ class OnnxShape(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: disabl
     def _onnx_attrs(self, opset_version: int) -> Dict[str, Any]:
         if opset_version < 15:
             if self._start != 0:
-                raise ValueError(f'Shape from opset < 15 does not support start != 0, got {self._start}')
+                raise ValueError(
+                    f"Shape from opset < 15 does not support start != 0, got {self._start}"
+                )
             if self._end is not None:
-                raise ValueError(f'Shape from opset < 15 does not support end != None, got {self._end}')
+                raise ValueError(
+                    f"Shape from opset < 15 does not support end != None, got {self._end}"
+                )
             return {}
 
-        onnx_attrs: Dict[str, Any] = {'start_i': self._start}
+        onnx_attrs: Dict[str, Any] = {"start_i": self._start}
         if self._end:
-            onnx_attrs['end_i'] = self._end
+            onnx_attrs["end_i"] = self._end
 
         return onnx_attrs
 
@@ -48,19 +52,21 @@ class OnnxShape(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: disabl
 
         if torch.onnx.is_in_onnx_export():
             onnx_attrs = self._onnx_attrs(opset_version=get_onnx_version())
-            return DefaultExportToOnnx.export(_forward, 'Shape', input_tensor, onnx_attrs)
+            return DefaultExportToOnnx.export(
+                _forward, "Shape", input_tensor, onnx_attrs
+            )
 
         return _forward()
 
 
-@add_converter(operation_type='Shape', version=1)
-@add_converter(operation_type='Shape', version=13)
-@add_converter(operation_type='Shape', version=15)
+@add_converter(operation_type="Shape", version=1)
+@add_converter(operation_type="Shape", version=13)
+@add_converter(operation_type="Shape", version=15)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: disable=unused-argument
     return OperationConverterResult(
         torch_module=OnnxShape(
-            start=node.attributes.get('start', 0),
-            end=node.attributes.get('end', None),
+            start=node.attributes.get("start", 0),
+            end=node.attributes.get("end", None),
         ),
         onnx_mapping=onnx_mapping_from_node(node=node),
     )

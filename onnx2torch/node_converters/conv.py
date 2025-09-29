@@ -11,19 +11,19 @@ from onnx2torch.utils.common import OperationConverterResult
 from onnx2torch.utils.padding import onnx_auto_pad_to_torch_padding
 
 _CONV_CLASS_FROM_SPATIAL_RANK = {
-    ('Conv', 1): nn.Conv1d,
-    ('Conv', 2): nn.Conv2d,
-    ('Conv', 3): nn.Conv3d,
-    ('ConvTranspose', 1): nn.ConvTranspose1d,
-    ('ConvTranspose', 2): nn.ConvTranspose2d,
-    ('ConvTranspose', 3): nn.ConvTranspose3d,
+    ("Conv", 1): nn.Conv1d,
+    ("Conv", 2): nn.Conv2d,
+    ("Conv", 3): nn.Conv3d,
+    ("ConvTranspose", 1): nn.ConvTranspose1d,
+    ("ConvTranspose", 2): nn.ConvTranspose2d,
+    ("ConvTranspose", 3): nn.ConvTranspose3d,
 }
 
 
-@add_converter(operation_type='Conv', version=1)
-@add_converter(operation_type='Conv', version=11)
-@add_converter(operation_type='ConvTranspose', version=1)
-@add_converter(operation_type='ConvTranspose', version=11)
+@add_converter(operation_type="Conv", version=1)
+@add_converter(operation_type="Conv", version=11)
+@add_converter(operation_type="ConvTranspose", version=1)
+@add_converter(operation_type="ConvTranspose", version=11)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:
     weights_value_name = node.input_values[1]
     weights = graph.initializers[weights_value_name]
@@ -41,37 +41,39 @@ def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:
         conv_class = _CONV_CLASS_FROM_SPATIAL_RANK[op_type, spatial_rank]
     except KeyError as exc:
         raise NotImplementedError(
-            f'Convolution operation with spatial rank == {spatial_rank} is not implemented'
+            f"Convolution operation with spatial rank == {spatial_rank} is not implemented"
         ) from exc
 
     node_attributes = node.attributes
     padding, input_padding_module = onnx_auto_pad_to_torch_padding(
-        onnx_padding=node_attributes.get('pads', [0] * spatial_rank * 2),
-        auto_pad=node_attributes.get('auto_pad', 'NOTSET'),
+        onnx_padding=node_attributes.get("pads", [0] * spatial_rank * 2),
+        auto_pad=node_attributes.get("auto_pad", "NOTSET"),
     )
     common_kwargs = {
-        'kernel_size': node_attributes.get('kernel_shape', weights.shape[2:]),
-        'stride': node_attributes.get('strides', 1),
-        'dilation': node_attributes.get('dilations', 1),
-        'groups': node_attributes.get('group', 1),
-        'padding': padding,
-        'bias': bias is not None,
+        "kernel_size": node_attributes.get("kernel_shape", weights.shape[2:]),
+        "stride": node_attributes.get("strides", 1),
+        "dilation": node_attributes.get("dilations", 1),
+        "groups": node_attributes.get("group", 1),
+        "padding": padding,
+        "bias": bias is not None,
     }
 
-    if op_type == 'Conv':
+    if op_type == "Conv":
         special_kwargs = {
-            'out_channels': weights.shape[0],
-            'in_channels': weights.shape[1] * common_kwargs['groups'],
+            "out_channels": weights.shape[0],
+            "in_channels": weights.shape[1] * common_kwargs["groups"],
         }
-    elif op_type == 'ConvTranspose':
+    elif op_type == "ConvTranspose":
         if input_padding_module is not None:
-            raise NotImplementedError('ConvTranspose with non symmetrical padding is not implemented.')
+            raise NotImplementedError(
+                "ConvTranspose with non symmetrical padding is not implemented."
+            )
 
-        output_padding = node_attributes.get('output_padding', [0] * spatial_rank)
+        output_padding = node_attributes.get("output_padding", [0] * spatial_rank)
         special_kwargs = {
-            'out_channels': weights.shape[1] * common_kwargs['groups'],
-            'in_channels': weights.shape[0],
-            'output_padding': output_padding,
+            "out_channels": weights.shape[1] * common_kwargs["groups"],
+            "in_channels": weights.shape[0],
+            "output_padding": output_padding,
         }
     else:
         raise ValueError(f'Got unknown op_type "{op_type}"')

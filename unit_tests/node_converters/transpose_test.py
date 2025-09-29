@@ -8,11 +8,11 @@ from tests.utils.common import make_model_from_nodes
 
 
 def _test_transpose(data: np.ndarray, **kwargs) -> None:
-    test_inputs = {'input_tensor': data}
+    test_inputs = {"input_tensor": data}
     node = onnx.helper.make_node(
-        op_type='Transpose',
+        op_type="Transpose",
         inputs=list(test_inputs),
-        outputs=['y'],
+        outputs=["y"],
         **kwargs,
     )
     model = make_model_from_nodes(

@@ -1,6 +1,6 @@
 __all__ = [
-    'OnnxSqueezeStaticAxes',
-    'OnnxSqueezeDynamicAxes',
+    "OnnxSqueezeStaticAxes",
+    "OnnxSqueezeDynamicAxes",
 ]
 
 from typing import List
@@ -41,10 +41,12 @@ class OnnxSqueezeStaticAxes(nn.Module, OnnxToTorchModuleWithCustomExport):  # py
         if torch.onnx.is_in_onnx_export() and get_onnx_version() >= 13:
             args = [input_tensor]
             if self.axes:
-                axes = torch.tensor(self.axes, device=input_tensor.device, dtype=torch.int64)
+                axes = torch.tensor(
+                    self.axes, device=input_tensor.device, dtype=torch.int64
+                )
                 args.append(axes)
 
-            return DefaultExportToOnnx.export(_forward, 'Squeeze', *args, {})
+            return DefaultExportToOnnx.export(_forward, "Squeeze", *args, {})
 
         return _forward()
 
@@ -77,23 +79,23 @@ class OnnxSqueezeDynamicAxes(  # pylint: disable=missing-class-docstring
             if not self.is_empty_axes(axes):
                 args.append(axes)
 
-            return DefaultExportToOnnx.export(_forward, 'Squeeze', *args, {})
+            return DefaultExportToOnnx.export(_forward, "Squeeze", *args, {})
 
         return _forward()
 
 
-@add_converter(operation_type='Squeeze', version=1)
-@add_converter(operation_type='Squeeze', version=11)
+@add_converter(operation_type="Squeeze", version=1)
+@add_converter(operation_type="Squeeze", version=11)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: disable=unused-argument
-    axes = node.attributes.get('axes', None)
+    axes = node.attributes.get("axes", None)
     return OperationConverterResult(
         torch_module=OnnxSqueezeStaticAxes(axes=axes),
         onnx_mapping=onnx_mapping_from_node(node),
     )
 
 
-@add_converter(operation_type='Squeeze', version=13)
-@add_converter(operation_type='Squeeze', version=21)
+@add_converter(operation_type="Squeeze", version=13)
+@add_converter(operation_type="Squeeze", version=21)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: disable=unused-argument
     return OperationConverterResult(
         torch_module=OnnxSqueezeDynamicAxes(),

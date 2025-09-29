@@ -18,27 +18,29 @@ def _test_resize(
     **kwargs,
 ) -> None:
     if align_corners:
-        kwargs['coordinate_transformation_mode'] = 'align_corners'
+        kwargs["coordinate_transformation_mode"] = "align_corners"
 
-    inputs = ['x', '']
-    test_inputs = {'x': x}
+    inputs = ["x", ""]
+    test_inputs = {"x": x}
     if scales is not None:
-        test_inputs['scales'] = scales
-        inputs.append('scales')
+        test_inputs["scales"] = scales
+        inputs.append("scales")
     else:
-        inputs.append('')
+        inputs.append("")
 
     if sizes is not None:
-        test_inputs['sizes'] = sizes
-        inputs.append('sizes')
+        test_inputs["sizes"] = sizes
+        inputs.append("sizes")
     else:
-        inputs.append('')
+        inputs.append("")
 
-    node = onnx.helper.make_node(op_type='Resize', inputs=inputs, outputs=['y'], **kwargs)
+    node = onnx.helper.make_node(
+        op_type="Resize", inputs=inputs, outputs=["y"], **kwargs
+    )
 
     outputs_info = [
         make_tensor_value_info(
-            name='y',
+            name="y",
             elem_type=NP_TYPE_TO_TENSOR_TYPE[x.dtype],
             shape=None,
         ),
@@ -62,15 +64,17 @@ def _test_resize(
 def _test_resize_v10(
     x: np.ndarray,
     scales: np.ndarray = None,
-    mode: str = 'nearest',
+    mode: str = "nearest",
 ) -> None:
-    test_inputs = {'x': x, 'scales': scales}
+    test_inputs = {"x": x, "scales": scales}
 
-    node = onnx.helper.make_node(op_type='Resize', inputs=list(test_inputs), outputs=['y'], mode=mode)
+    node = onnx.helper.make_node(
+        op_type="Resize", inputs=list(test_inputs), outputs=["y"], mode=mode
+    )
 
     outputs_info = [
         make_tensor_value_info(
-            name='y',
+            name="y",
             elem_type=NP_TYPE_TO_TENSOR_TYPE[x.dtype],
             shape=None,
         ),
@@ -102,20 +106,20 @@ _DATA = np.random.normal(scale=3.0, size=[1, 1, 250, 250]).astype(np.float32)
 
 
 @pytest.mark.parametrize(
-    'sizes,scales,mode,coordinate_transformation_mode',
+    "sizes,scales,mode,coordinate_transformation_mode",
     (
-        (_UPSAMPLE_SIZES, None, 'linear', 'half_pixel'),
-        (None, _UPSAMPLE_SCALES, 'linear', 'half_pixel'),
-        (_DOWNSAMPLE_SIZES, None, 'linear', 'half_pixel'),
-        (None, _DOWNSAMPLE_SCALES, 'linear', 'half_pixel'),
-        (_UPSAMPLE_SIZES, None, 'nearest', 'asymmetric'),
-        (None, _UPSAMPLE_SCALES, 'nearest', 'asymmetric'),
-        (_DOWNSAMPLE_SIZES, None, 'nearest', 'asymmetric'),
-        (None, _DOWNSAMPLE_SCALES, 'nearest', 'asymmetric'),
-        (_UPSAMPLE_SIZES, None, 'cubic', 'half_pixel'),
-        (None, _UPSAMPLE_SCALES, 'cubic', 'half_pixel'),
-        (_DOWNSAMPLE_SIZES, None, 'cubic', 'half_pixel'),
-        (None, _DOWNSAMPLE_SCALES, 'cubic', 'half_pixel'),
+        (_UPSAMPLE_SIZES, None, "linear", "half_pixel"),
+        (None, _UPSAMPLE_SCALES, "linear", "half_pixel"),
+        (_DOWNSAMPLE_SIZES, None, "linear", "half_pixel"),
+        (None, _DOWNSAMPLE_SCALES, "linear", "half_pixel"),
+        (_UPSAMPLE_SIZES, None, "nearest", "asymmetric"),
+        (None, _UPSAMPLE_SCALES, "nearest", "asymmetric"),
+        (_DOWNSAMPLE_SIZES, None, "nearest", "asymmetric"),
+        (None, _DOWNSAMPLE_SCALES, "nearest", "asymmetric"),
+        (_UPSAMPLE_SIZES, None, "cubic", "half_pixel"),
+        (None, _UPSAMPLE_SCALES, "cubic", "half_pixel"),
+        (_DOWNSAMPLE_SIZES, None, "cubic", "half_pixel"),
+        (None, _DOWNSAMPLE_SCALES, "cubic", "half_pixel"),
     ),
 )
 def test_resize(  # pylint: disable=missing-function-docstring
@@ -129,12 +133,12 @@ def test_resize(  # pylint: disable=missing-function-docstring
         sizes=sizes,
         scales=scales,
         mode=mode,
-        nearest_mode='floor',
+        nearest_mode="floor",
         coordinate_transformation_mode=coordinate_transformation_mode,
     )
 
 
-@pytest.mark.parametrize('mode', ('nearest',))
+@pytest.mark.parametrize("mode", ("nearest",))
 def test_resize_v10(mode: str) -> None:  # pylint: disable=missing-function-docstring
     _test_resize_v10(x=_DATA, scales=_UPSAMPLE_SCALES, mode=mode)
     _test_resize_v10(x=_DATA, scales=_DOWNSAMPLE_SCALES, mode=mode)

@@ -8,17 +8,21 @@ from tests.utils.common import make_model_from_nodes
 
 
 def _test_topk(data: np.ndarray, k: np.ndarray, **kwargs) -> None:  # pylint: disable=invalid-name
-    test_inputs = {'input_tensor': data, 'k': k}
+    test_inputs = {"input_tensor": data, "k": k}
 
     node = onnx.helper.make_node(
-        op_type='TopK',
+        op_type="TopK",
         inputs=list(test_inputs),
-        outputs=['y_0', 'y_1'],
+        outputs=["y_0", "y_1"],
         **kwargs,
     )
     outputs_info = [
-        make_tensor_value_info(name='y_0', elem_type=NP_TYPE_TO_TENSOR_TYPE[data.dtype], shape=None),
-        make_tensor_value_info(name='y_1', elem_type=NP_TYPE_TO_TENSOR_TYPE[np.dtype('int64')], shape=None),
+        make_tensor_value_info(
+            name="y_0", elem_type=NP_TYPE_TO_TENSOR_TYPE[data.dtype], shape=None
+        ),
+        make_tensor_value_info(
+            name="y_1", elem_type=NP_TYPE_TO_TENSOR_TYPE[np.dtype("int64")], shape=None
+        ),
     ]
     model = make_model_from_nodes(
         nodes=node,

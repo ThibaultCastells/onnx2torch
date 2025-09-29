@@ -1,8 +1,8 @@
 # pylint: disable=missing-class-docstring
 __all__ = [
-    'OnnxReduceSumDynamicAxes',
-    'OnnxReduceSumStaticAxes',
-    'OnnxReduceStaticAxes',
+    "OnnxReduceSumDynamicAxes",
+    "OnnxReduceSumStaticAxes",
+    "OnnxReduceStaticAxes",
 ]
 
 from functools import partial
@@ -76,16 +76,16 @@ def _sum_square(
 
 
 _TORCH_FUNCTION_FROM_ONNX_TYPE = {
-    'ReduceL1': partial(torch.norm, p=1),
-    'ReduceL2': partial(torch.norm, p=2),
-    'ReduceLogSum': _log_sum,
-    'ReduceLogSumExp': _log_sum_exp,
-    'ReduceMax': torch.max,
-    'ReduceMean': torch.mean,
-    'ReduceMin': torch.min,
-    'ReduceProd': torch.prod,
-    'ReduceSum': torch.sum,
-    'ReduceSumSquare': _sum_square,
+    "ReduceL1": partial(torch.norm, p=1),
+    "ReduceL2": partial(torch.norm, p=2),
+    "ReduceLogSum": _log_sum,
+    "ReduceLogSumExp": _log_sum_exp,
+    "ReduceMax": torch.max,
+    "ReduceMean": torch.mean,
+    "ReduceMin": torch.min,
+    "ReduceProd": torch.prod,
+    "ReduceSum": torch.sum,
+    "ReduceSumSquare": _sum_square,
 }
 
 
@@ -99,8 +99,8 @@ class OnnxReduceSumDynamicAxes(nn.Module, OnnxToTorchModuleWithCustomExport):
     def _onnx_attrs(self, opset_version: int) -> Dict[str, Any]:
         del opset_version
         return {
-            'noop_with_empty_axes_i': self._noop_with_empty_axes,
-            'keepdims_i': self._keepdims,
+            "noop_with_empty_axes_i": self._noop_with_empty_axes,
+            "keepdims_i": self._keepdims,
         }
 
     def forward(  # pylint: disable=missing-function-docstring
@@ -128,7 +128,7 @@ class OnnxReduceSumDynamicAxes(nn.Module, OnnxToTorchModuleWithCustomExport):
                 args.append(axes)
 
             onnx_attrs = self._onnx_attrs(opset_version=get_onnx_version())
-            return DefaultExportToOnnx.export(_forward, 'ReduceSum', *args, onnx_attrs)
+            return DefaultExportToOnnx.export(_forward, "ReduceSum", *args, onnx_attrs)
 
         return _forward()
 
@@ -185,8 +185,10 @@ class OnnxReduceStaticAxes(nn.Module, OnnxToTorchModule):
 
             self.axes = list(range(input_tensor.dim()))
 
-        if self.operation_type not in ['ReduceMax', 'ReduceMin', 'ReduceProd']:
-            return self.math_op_function(input_tensor, dim=self.axes, keepdim=self.keepdims)
+        if self.operation_type not in ["ReduceMax", "ReduceMin", "ReduceProd"]:
+            return self.math_op_function(
+                input_tensor, dim=self.axes, keepdim=self.keepdims
+            )
 
         result = input_tensor
         for passed_dims, axis in enumerate(self.axes):
@@ -200,42 +202,42 @@ class OnnxReduceStaticAxes(nn.Module, OnnxToTorchModule):
         return result
 
 
-@add_converter(operation_type='ReduceL1', version=1)
-@add_converter(operation_type='ReduceL1', version=11)
-@add_converter(operation_type='ReduceL1', version=13)
-@add_converter(operation_type='ReduceL2', version=1)
-@add_converter(operation_type='ReduceL2', version=11)
-@add_converter(operation_type='ReduceL2', version=13)
-@add_converter(operation_type='ReduceLogSum', version=1)
-@add_converter(operation_type='ReduceLogSum', version=11)
-@add_converter(operation_type='ReduceLogSum', version=13)
-@add_converter(operation_type='ReduceLogSumExp', version=1)
-@add_converter(operation_type='ReduceLogSumExp', version=11)
-@add_converter(operation_type='ReduceLogSumExp', version=13)
-@add_converter(operation_type='ReduceMax', version=1)
-@add_converter(operation_type='ReduceMax', version=11)
-@add_converter(operation_type='ReduceMax', version=12)
-@add_converter(operation_type='ReduceMax', version=13)
-@add_converter(operation_type='ReduceMean', version=1)
-@add_converter(operation_type='ReduceMean', version=11)
-@add_converter(operation_type='ReduceMean', version=13)
-@add_converter(operation_type='ReduceMin', version=1)
-@add_converter(operation_type='ReduceMin', version=11)
-@add_converter(operation_type='ReduceMin', version=12)
-@add_converter(operation_type='ReduceMin', version=13)
-@add_converter(operation_type='ReduceProd', version=1)
-@add_converter(operation_type='ReduceProd', version=11)
-@add_converter(operation_type='ReduceProd', version=13)
-@add_converter(operation_type='ReduceSum', version=1)
-@add_converter(operation_type='ReduceSum', version=11)
-@add_converter(operation_type='ReduceSumSquare', version=1)
-@add_converter(operation_type='ReduceSumSquare', version=11)
-@add_converter(operation_type='ReduceSumSquare', version=13)
+@add_converter(operation_type="ReduceL1", version=1)
+@add_converter(operation_type="ReduceL1", version=11)
+@add_converter(operation_type="ReduceL1", version=13)
+@add_converter(operation_type="ReduceL2", version=1)
+@add_converter(operation_type="ReduceL2", version=11)
+@add_converter(operation_type="ReduceL2", version=13)
+@add_converter(operation_type="ReduceLogSum", version=1)
+@add_converter(operation_type="ReduceLogSum", version=11)
+@add_converter(operation_type="ReduceLogSum", version=13)
+@add_converter(operation_type="ReduceLogSumExp", version=1)
+@add_converter(operation_type="ReduceLogSumExp", version=11)
+@add_converter(operation_type="ReduceLogSumExp", version=13)
+@add_converter(operation_type="ReduceMax", version=1)
+@add_converter(operation_type="ReduceMax", version=11)
+@add_converter(operation_type="ReduceMax", version=12)
+@add_converter(operation_type="ReduceMax", version=13)
+@add_converter(operation_type="ReduceMean", version=1)
+@add_converter(operation_type="ReduceMean", version=11)
+@add_converter(operation_type="ReduceMean", version=13)
+@add_converter(operation_type="ReduceMin", version=1)
+@add_converter(operation_type="ReduceMin", version=11)
+@add_converter(operation_type="ReduceMin", version=12)
+@add_converter(operation_type="ReduceMin", version=13)
+@add_converter(operation_type="ReduceProd", version=1)
+@add_converter(operation_type="ReduceProd", version=11)
+@add_converter(operation_type="ReduceProd", version=13)
+@add_converter(operation_type="ReduceSum", version=1)
+@add_converter(operation_type="ReduceSum", version=11)
+@add_converter(operation_type="ReduceSumSquare", version=1)
+@add_converter(operation_type="ReduceSumSquare", version=11)
+@add_converter(operation_type="ReduceSumSquare", version=13)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:
     del graph
     node_attributes = node.attributes
-    axes: Optional[List[int]] = node_attributes.get('axes', None)
-    keepdims: int = node_attributes.get('keepdims', 1)
+    axes: Optional[List[int]] = node_attributes.get("axes", None)
+    keepdims: int = node_attributes.get("keepdims", 1)
 
     return OperationConverterResult(
         torch_module=OnnxReduceStaticAxes(
@@ -247,10 +249,10 @@ def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:
     )
 
 
-@add_converter(operation_type='ReduceSum', version=13)
+@add_converter(operation_type="ReduceSum", version=13)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:
-    keepdims: int = node.attributes.get('keepdims', 1)
-    noop_with_empty_axes: int = node.attributes.get('noop_with_empty_axes', 0)
+    keepdims: int = node.attributes.get("keepdims", 1)
+    noop_with_empty_axes: int = node.attributes.get("noop_with_empty_axes", 0)
 
     if len(node.input_values) == 2:
         try:
@@ -271,6 +273,8 @@ def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:
             pass
 
     return OperationConverterResult(
-        torch_module=OnnxReduceSumDynamicAxes(keepdims=keepdims, noop_with_empty_axes=noop_with_empty_axes),
+        torch_module=OnnxReduceSumDynamicAxes(
+            keepdims=keepdims, noop_with_empty_axes=noop_with_empty_axes
+        ),
         onnx_mapping=onnx_mapping_from_node(node),
     )

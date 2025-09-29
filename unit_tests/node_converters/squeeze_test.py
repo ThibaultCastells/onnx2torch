@@ -19,22 +19,24 @@ def _test_squeeze(
     opset_version: int,
     **kwargs,
 ) -> None:
-    test_inputs: Dict[str, Any] = {'input_tensor': input_tensor}
+    test_inputs: Dict[str, Any] = {"input_tensor": input_tensor}
 
     if axes is not None and len(axes) > 0:
         if opset_version >= 13:
-            test_inputs['axes'] = np.array(axes, dtype=np.int64)
+            test_inputs["axes"] = np.array(axes, dtype=np.int64)
         else:
-            kwargs['axes'] = axes
+            kwargs["axes"] = axes
 
-        output_shape = np.squeeze(input_tensor, axis=tuple(a for a in axes if input_tensor.shape[a] == 1)).shape
+        output_shape = np.squeeze(
+            input_tensor, axis=tuple(a for a in axes if input_tensor.shape[a] == 1)
+        ).shape
     else:
         output_shape = np.squeeze(input_tensor).shape
 
     node = onnx.helper.make_node(
-        op_type='Squeeze',
+        op_type="Squeeze",
         inputs=list(test_inputs),
-        outputs=['y'],
+        outputs=["y"],
         **kwargs,
     )
 
@@ -45,7 +47,7 @@ def _test_squeeze(
         opset_version=opset_version,
         outputs_info=(
             make_tensor_value_info(
-                name='y',
+                name="y",
                 elem_type=NP_TYPE_TO_TENSOR_TYPE[input_tensor.dtype],
                 shape=output_shape,
             ),
@@ -54,10 +56,10 @@ def _test_squeeze(
     check_onnx_model(model, test_inputs)
 
 
-@pytest.mark.filterwarnings('ignore::torch.jit._trace.TracerWarning')
-@pytest.mark.parametrize('opset_version', [11, 13, 21])
+@pytest.mark.filterwarnings("ignore::torch.jit._trace.TracerWarning")
+@pytest.mark.parametrize("opset_version", [11, 13, 21])
 @pytest.mark.parametrize(
-    'shape, axes',
+    "shape, axes",
     (
         ([1, 3, 4, 5], [0]),
         ([1, 3, 1, 5], [-2]),

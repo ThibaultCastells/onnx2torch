@@ -1,5 +1,5 @@
 __all__ = [
-    'OnnxEinsum',
+    "OnnxEinsum",
 ]
 
 import torch
@@ -22,11 +22,11 @@ class OnnxEinsum(nn.Module, OnnxToTorchModule):  # pylint: disable=missing-docst
         return torch.einsum(self.equation, *args)
 
 
-@add_converter(operation_type='Einsum', version=12)
+@add_converter(operation_type="Einsum", version=12)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: disable=unused-argument
     return OperationConverterResult(
         torch_module=OnnxEinsum(
-            equation=node.attributes['equation'],
+            equation=node.attributes["equation"],
         ),
         onnx_mapping=onnx_mapping_from_node(node=node),
     )

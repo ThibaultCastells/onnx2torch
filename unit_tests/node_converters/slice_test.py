@@ -19,22 +19,22 @@ def _test_slice(
     axes: Optional[np.ndarray] = None,
     steps: Optional[np.ndarray] = None,
 ) -> None:
-    test_inputs = {'input_tensor': input_tensor}
+    test_inputs = {"input_tensor": input_tensor}
 
-    initializers = {'starts': starts, 'ends': ends}
+    initializers = {"starts": starts, "ends": ends}
     if axes is not None:
-        initializers['axes'] = axes
+        initializers["axes"] = axes
     if steps is not None:
-        initializers['steps'] = steps
+        initializers["steps"] = steps
 
     node = onnx.helper.make_node(
-        op_type='Slice',
+        op_type="Slice",
         inputs=list(test_inputs.keys()) + list(initializers.keys()),
-        outputs=['y'],
+        outputs=["y"],
     )
     outputs_info = [
         make_tensor_value_info(
-            name='y',
+            name="y",
             elem_type=NP_TYPE_TO_TENSOR_TYPE[input_tensor.dtype],
             shape=None,
         ),
@@ -50,9 +50,9 @@ def _test_slice(
     check_onnx_model(model, test_inputs, ignore_export_checker=ignore_export_checker)
 
 
-@pytest.mark.filterwarnings('ignore::torch.jit._trace.TracerWarning')
+@pytest.mark.filterwarnings("ignore::torch.jit._trace.TracerWarning")
 @pytest.mark.parametrize(
-    'input_shape,starts,ends,axes,steps',
+    "input_shape,starts,ends,axes,steps",
     (
         ((20, 10, 15), [0, 0], [3, 10], [0, 1], [1, 1]),
         ((20, 10, 15), [0, 0, 3], [20, 10, 4], None, None),

@@ -69,11 +69,17 @@ def test_arg_max_arg_min(
         # of the max/min (respectively) occurance
         kwargs["select_last_index"] = select_last_index
 
-    node = onnx.helper.make_node(op_type=op_type, inputs=["data"], outputs=["reduced"], **kwargs)
+    node = onnx.helper.make_node(
+        op_type=op_type, inputs=["data"], outputs=["reduced"], **kwargs
+    )
 
     # we need to specify outputs_info, since the required output type for arg max (int64)
     # is different than the input type
-    outputs_info = [make_tensor_value_info(name="reduced", elem_type=onnx.TensorProto.INT64, shape=None)]
+    outputs_info = [
+        make_tensor_value_info(
+            name="reduced", elem_type=onnx.TensorProto.INT64, shape=None
+        )
+    ]
 
     model = make_model_from_nodes(
         nodes=node,

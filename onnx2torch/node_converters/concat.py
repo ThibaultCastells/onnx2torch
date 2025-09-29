@@ -1,5 +1,5 @@
 __all__ = [
-    'OnnxConcat',
+    "OnnxConcat",
 ]
 
 import torch
@@ -22,11 +22,11 @@ class OnnxConcat(nn.Module, OnnxToTorchModule):  # pylint: disable=missing-docst
         return torch.cat(input_tensors, self.axis)
 
 
-@add_converter(operation_type='Concat', version=4)
-@add_converter(operation_type='Concat', version=11)
-@add_converter(operation_type='Concat', version=13)
+@add_converter(operation_type="Concat", version=4)
+@add_converter(operation_type="Concat", version=11)
+@add_converter(operation_type="Concat", version=13)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: disable=unused-argument
-    axis = node.attributes.get('axis', 0)
+    axis = node.attributes.get("axis", 0)
     torch_module = OnnxConcat(
         axis=axis,
     )

@@ -1,7 +1,7 @@
 import torch
 
 __all__ = [
-    'upcast_indices',
+    "upcast_indices",
 ]
 
 _INT_DTYPES = (
@@ -26,5 +26,7 @@ def upcast_indices(indices: torch.Tensor) -> torch.Tensor:
 
     """
     if not any(indices.dtype == dtype for dtype in _INT_DTYPES):
-        raise ValueError(f'Expected types of indices: {_INT_DTYPES}, got {indices.dtype} instead')
+        raise ValueError(
+            f"Expected types of indices: {_INT_DTYPES}, got {indices.dtype} instead"
+        )
     return indices.type(dtype=torch.int64)

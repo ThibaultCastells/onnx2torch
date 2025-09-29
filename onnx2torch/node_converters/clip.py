@@ -1,5 +1,5 @@
 __all__ = [
-    'OnnxClip',
+    "OnnxClip",
 ]
 
 from typing import Optional
@@ -32,7 +32,9 @@ class OnnxClip(nn.Module, OnnxToTorchModule):  # pylint: disable=missing-docstri
         return torch.clamp(input_tensor, self.min_val, self.max_val)
 
 
-def _create_torch_module(min_val: Optional[torch.Tensor], max_val: Optional[torch.Tensor]) -> nn.Module:
+def _create_torch_module(
+    min_val: Optional[torch.Tensor], max_val: Optional[torch.Tensor]
+) -> nn.Module:
     if min_val is None and max_val is None:
         torch_module = nn.Identity()
     elif min_val == 0 and max_val is None:
@@ -45,19 +47,25 @@ def _create_torch_module(min_val: Optional[torch.Tensor], max_val: Optional[torc
     return torch_module
 
 
-@add_converter(operation_type='Clip', version=11)
-@add_converter(operation_type='Clip', version=12)
-@add_converter(operation_type='Clip', version=13)
+@add_converter(operation_type="Clip", version=11)
+@add_converter(operation_type="Clip", version=12)
+@add_converter(operation_type="Clip", version=13)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:
     # Min and Max inputs are optional
     min_name = node.input_values[1] if len(node.input_values) > 1 else None
     max_name = node.input_values[2] if len(node.input_values) > 2 else None
 
     try:
-        min_val = float(get_const_value(min_name, graph)) if min_name is not None else None
-        max_val = float(get_const_value(max_name, graph)) if max_name is not None else None
+        min_val = (
+            float(get_const_value(min_name, graph)) if min_name is not None else None
+        )
+        max_val = (
+            float(get_const_value(max_name, graph)) if max_name is not None else None
+        )
     except KeyError as exc:
-        raise NotImplementedError('Dynamic value of min/max is not implemented') from exc
+        raise NotImplementedError(
+            "Dynamic value of min/max is not implemented"
+        ) from exc
 
     torch_module = _create_torch_module(min_val=min_val, max_val=max_val)
 
@@ -70,11 +78,11 @@ def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:
     )
 
 
-@add_converter(operation_type='Clip', version=6)
+@add_converter(operation_type="Clip", version=6)
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: disable=unused-argument
     node_attributes = node.attributes
-    min_val = node_attributes.get('min', None)
-    max_val = node_attributes.get('max', None)
+    min_val = node_attributes.get("min", None)
+    max_val = node_attributes.get("max", None)
 
     torch_module = _create_torch_module(min_val=min_val, max_val=max_val)
 

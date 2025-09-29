@@ -16,18 +16,20 @@ def test_pow() -> None:  # pylint: disable=missing-function-docstring
 
     y_variants = [
         np.random.uniform(low=-3.0, high=3.0, size=1).astype(np.float32),
-        np.random.randint(low=0, high=4, size=[1] * len(input_shape)).astype(np.float32),
+        np.random.randint(low=0, high=4, size=[1] * len(input_shape)).astype(
+            np.float32
+        ),
         np.random.randint(low=-4, high=0, size=input_shape).astype(np.float32),
         np.array([0.0], dtype=np.float32),
     ]
 
     for x, y in zip(x_variants, y_variants):
-        test_inputs = {'x': x, 'y': y}
+        test_inputs = {"x": x, "y": y}
         initializers = {}
         node = onnx.helper.make_node(
-            op_type='Pow',
-            inputs=['x', 'y'],
-            outputs=['z'],
+            op_type="Pow",
+            inputs=["x", "y"],
+            outputs=["z"],
         )
 
         model = make_model_from_nodes(
@@ -42,13 +44,15 @@ def test_sqrt() -> None:  # pylint: disable=missing-function-docstring
     input_shape = [10, 3, 128, 128]
     x = np.random.uniform(low=0.0, high=10.0, size=input_shape).astype(np.float32)
 
-    test_inputs = {'x': x}
+    test_inputs = {"x": x}
     initializers = {}
     node = onnx.helper.make_node(
-        op_type='Sqrt',
-        inputs=['x'],
-        outputs=['z'],
+        op_type="Sqrt",
+        inputs=["x"],
+        outputs=["z"],
     )
 
-    model = make_model_from_nodes(nodes=node, initializers=initializers, inputs_example=test_inputs)
+    model = make_model_from_nodes(
+        nodes=node, initializers=initializers, inputs_example=test_inputs
+    )
     check_onnx_model(model, test_inputs)
