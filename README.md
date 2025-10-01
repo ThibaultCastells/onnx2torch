@@ -58,6 +58,24 @@ print(torch.max(torch.abs(outputs_ort - out_torch.detach().numpy())))
 print(np.allclose(outputs_ort, out_torch.detach().numpy(), atol=1.0e-7))
 ```
 
+### CLI Conversion
+
+The `run.py` helper script converts one or more ONNX models to `torch.export` bundles using a YAML configuration:
+
+```bash
+python run.py --cfg cfg/example.yml
+```
+
+When an ONNX model does not embed static input dimensions, list them under the `input_shapes` section of the config. Use the ONNX file path as the key (relative to the working directory) and provide per-input shapes, for example:
+
+```yaml
+input_shapes:
+  data/onnx/model_without_shapes.onnx:
+    input_1: [1, 3, 224, 224]
+```
+
+The converter validates that every shape-less model referenced in the config supplies these overrides before running [`onnxsim.simplify`](https://github.com/daquexian/onnx-simplifier) to bake the dimensions into the graph.
+
 ## How to add new operations to converter
 
 ### :page_facing_up: List of currently supported operations can be founded [here](operators.md).

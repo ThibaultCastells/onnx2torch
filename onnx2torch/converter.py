@@ -12,6 +12,7 @@ from torch import nn
 from onnx2torch.node_converters import get_converter
 from onnx2torch.onnx_graph import OnnxGraph
 from onnx2torch.onnx_graph import ValueType
+from onnx2torch.utils.error_context import attach_onnx_context
 from onnx2torch.utils.safe_shape_inference import safe_shape_inference
 
 
@@ -115,6 +116,7 @@ def convert(  # pylint: disable=too-many-locals, too-many-branches, too-many-sta
         )
 
         torch_module, onnx_mapping = converter(onnx_node, onnx_graph)
+        attach_onnx_context(torch_module, onnx_node, onnx_mapping)
         if attach_onnx_mapping:
             setattr(torch_module, "onnx_mapping", onnx_mapping)
 

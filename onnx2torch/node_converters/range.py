@@ -23,11 +23,41 @@ class OnnxRange(nn.Module, OnnxToTorchModuleWithCustomExport):
         self.register_buffer("dummy_buffer", torch.Tensor(), persistent=False)
 
     @staticmethod
-    def _get_scalar(value) -> Union[float, int]:
-        if isinstance(value, torch.Tensor):
-            return value.item()
+    def _infer_device(
+        start: Union[torch.Tensor, float, int],
+        limit: Union[torch.Tensor, float, int],
+        delta: Union[torch.Tensor, float, int],
+        fallback: torch.device,
+    ) -> torch.device:
+        for value in (start, limit, delta):
+            if isinstance(value, torch.Tensor):
+                return value.device
+        return fallback
 
-        return value
+    @staticmethod
+    def _as_tensor(
+        value: Union[torch.Tensor, float, int], device: torch.device
+    ) -> torch.Tensor:
+        if isinstance(value, torch.Tensor):
+            return value.to(device=device)
+        return torch.tensor(value, device=device)
+
+    @staticmethod
+    def _promote_dtype(
+        start: torch.Tensor,
+        limit: torch.Tensor,
+        delta: torch.Tensor,
+    ) -> torch.dtype:
+        dtype = torch.promote_types(start.dtype, limit.dtype)
+        dtype = torch.promote_types(dtype, delta.dtype)
+        return dtype
+
+    @staticmethod
+    def _calc_dtype(base_dtype: torch.dtype) -> torch.dtype:
+        if base_dtype.is_floating_point:
+            return base_dtype
+        # Use float64 to minimise precision loss for large integer ranges.
+        return torch.float64
 
     def _arange(
         self,
@@ -35,12 +65,29 @@ class OnnxRange(nn.Module, OnnxToTorchModuleWithCustomExport):
         limit: Union[torch.Tensor, float, int],
         delta: Union[torch.Tensor, float, int],
     ) -> torch.Tensor:
-        return torch.arange(
-            start=self._get_scalar(start),
-            end=self._get_scalar(limit),
-            step=self._get_scalar(delta),
-            device=self.dummy_buffer.device,
-        )
+        device = self._infer_device(start, limit, delta, self.dummy_buffer.device)
+
+        start_tensor = self._as_tensor(start, device)
+        limit_tensor = self._as_tensor(limit, device)
+        delta_tensor = self._as_tensor(delta, device)
+
+        base_dtype = self._promote_dtype(start_tensor, limit_tensor, delta_tensor)
+        start_tensor = start_tensor.to(base_dtype)
+        limit_tensor = limit_tensor.to(base_dtype)
+        delta_tensor = delta_tensor.to(base_dtype)
+
+        calc_dtype = self._calc_dtype(base_dtype)
+        start_calc = start_tensor.to(calc_dtype)
+        limit_calc = limit_tensor.to(calc_dtype)
+        delta_calc = delta_tensor.to(calc_dtype)
+
+        steps = torch.ceil((limit_calc - start_calc) / delta_calc)
+        steps = torch.clamp_min(steps, 0)
+        steps_int = steps.to(torch.int64)
+
+        seq = torch.arange(steps_int, device=device, dtype=calc_dtype)
+        values = start_calc + delta_calc * seq
+        return values.to(base_dtype)
 
     def forward(
         self,

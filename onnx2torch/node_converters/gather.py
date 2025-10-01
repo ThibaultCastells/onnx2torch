@@ -63,11 +63,32 @@ class OnnxGather(nn.Module, OnnxToTorchModuleWithCustomExport):
         self, input_tensor: torch.Tensor, indices: torch.Tensor
     ) -> torch.Tensor:
         def _forward():
-            # pytorch Gather differs from onnx Gather, onnx gather work like numpy.take
-            # But torch.take does not support different axis. So we make it by yourself
-            # numpy.take is input_data[:, :, indices] where we pass NONE slices AXIS time
-            slice_for_take = self.slice_from_axis(input_tensor, self._axis, indices)
-            return input_tensor[slice_for_take]
+            axis = self._axis % input_tensor.dim()
+            indices_long = upcast_indices(indices)
+
+            permuted = input_tensor.movedim(axis, 0)
+            flat_indices = indices_long.reshape(-1)
+            gathered = torch.index_select(permuted, 0, flat_indices)
+
+            out_shape = (*indices_long.shape, *permuted.shape[1:])
+            gathered = gathered.reshape(out_shape)
+
+            num_leading = axis
+            num_indices = indices_long.dim()
+            num_trailing = input_tensor.dim() - axis - 1
+
+            permuted_dims = list(range(num_indices, num_indices + num_leading))
+            permuted_dims += list(range(num_indices))
+            permuted_dims += list(
+                range(
+                    num_indices + num_leading, num_indices + num_leading + num_trailing
+                )
+            )
+
+            if gathered.dim() and permuted_dims != list(range(gathered.dim())):
+                gathered = gathered.permute(*permuted_dims)
+
+            return gathered
 
         if torch.onnx.is_in_onnx_export():
             onnx_attrs = self._onnx_attrs(opset_version=get_onnx_version())

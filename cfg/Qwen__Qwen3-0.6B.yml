@@ -1,9 +1,9 @@
 # Example configuration for run.py
 # This configuration converts every .onnx model under data/onnx/ recursively.
 inputs:
-  - path: data/onnx
-    recursive: true
-    pattern: '*.onnx'
+  path: data/onnx
+  recursive: true
+  pattern: '*.onnx'
 
 # Destination directory for the generated .pt2 files.
 output_dir: data/executorch
@@ -23,3 +23,12 @@ conversion:
 #       fill: ones
 
 device: cpu
+
+# If a model lacks static input shapes, declare them here. Keys must point to
+# the ONNX file (relative paths are resolved from the working directory), with
+# each value mapping input tensor names to their shapes.
+input_shapes:
+  data/onnx/Qwen__Qwen3-0.6B/onnx/model.onnx:
+    input_ids: [1, 32768]
+    attention_mask: [1, 32768]
+    position_ids: [1, 32768]
