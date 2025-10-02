@@ -39,6 +39,11 @@ except (
         "torch>=2.1 is required to export models to .pt2 format"
     ) from exc
 
+try:
+    from torch.export import save as export_save  # torch>=2.1 preferred path
+except (ImportError, AttributeError):  # pragma: no cover - guard for older torch
+    export_save = None
+
 LOGGER = logging.getLogger("onnx2torch.runner")
 DEFAULT_OUTPUT_DIR = Path("data/executorch")
 RUN_LOG_ROOT = Path("logs/run_logs")
@@ -141,6 +146,22 @@ def _setup_logging(run_context: RunContext) -> None:
 
     root_logger.addHandler(console_handler)
     root_logger.addHandler(file_handler)
+
+
+def _save_exported_program(
+    exported: torch.export.ExportedProgram, destination: Path
+) -> None:
+    """Persist an ExportedProgram across torch versions."""
+
+    if export_save is not None:
+        export_save(exported, str(destination))
+    elif hasattr(exported, "save"):
+        exported.save(str(destination))  # type: ignore[attr-defined]
+    else:  # pragma: no cover - defensive guard for unexpected API changes
+        raise RuntimeError(
+            "This version of torch does not support saving ExportedProgram instances. "
+            "Please upgrade torch to >=2.1."
+        )
 
 
 def _load_config(path: Path) -> RunnerConfig:
@@ -734,7 +755,7 @@ def _export_model(
             LOGGER.debug("Finished export_program for %s", task.source)
 
     task.destination.parent.mkdir(parents=True, exist_ok=True)
-    exported.save(str(task.destination))
+    _save_exported_program(exported, task.destination)
     LOGGER.info("Saved %s", task.destination)
 
 

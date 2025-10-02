@@ -19,11 +19,24 @@ from onnx2torch.utils.custom_export_to_onnx import DefaultExportToOnnx
 from onnx2torch.utils.custom_export_to_onnx import OnnxToTorchModuleWithCustomExport
 from onnx2torch.utils.shape_utils import shape_tensor_to_sequence
 
+try:  # pragma: no cover - FakeTensor not available on older torch builds
+    from torch._subclasses.fake_tensor import FakeTensor
+except ImportError:  # pragma: no cover - keep isinstance checks safe
+    FakeTensor = ()  # type: ignore[assignment]
+
 
 class OnnxReshape(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: disable=missing-class-docstring
     def __init__(self, static_shape: Optional[Tuple[int, ...]] = None) -> None:
         super().__init__()
         self._static_shape = tuple(static_shape) if static_shape is not None else None
+        self._cached_target_shape: Optional[Tuple[int, ...]] = None
+
+    @staticmethod
+    def _is_fake_tensor(tensor: torch.Tensor) -> bool:
+        return isinstance(tensor, FakeTensor)
+
+    def _maybe_cache_shape(self, dims: Tuple[int, ...]) -> None:
+        self._cached_target_shape = tuple(dims)
 
     @staticmethod
     def _input_shape_tensor(
@@ -62,12 +75,17 @@ class OnnxReshape(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: disa
         padded = torch.cat((shape_tensor, padding))
         return padded.to(dtype=dtype)
 
-    @classmethod
     def _do_reshape(
-        cls, input_tensor: torch.Tensor, shape: torch.Tensor
+        self, input_tensor: torch.Tensor, shape: torch.Tensor
     ) -> torch.Tensor:
+        if self._cached_target_shape is not None and self._is_fake_tensor(input_tensor):
+            if not self._cached_target_shape:
+                return torch.ops.aten.view.default(input_tensor, [])
+
+            return torch.reshape(input_tensor, list(self._cached_target_shape))
+
         shape_tensor = shape.to(dtype=torch.int64)
-        input_shape_tensor = cls._input_shape_tensor(
+        input_shape_tensor = self._input_shape_tensor(
             input_tensor,
             shape_tensor.dtype,
             shape_tensor.device,
@@ -104,7 +122,17 @@ class OnnxReshape(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: disa
                     target_dims = tuple(dims_list)
 
         if not target_dims:
+            if not self._is_fake_tensor(input_tensor):
+                self._maybe_cache_shape(())
             return torch.ops.aten.view.default(input_tensor, [])
+
+        if not self._is_fake_tensor(input_tensor):
+            try:
+                concrete_dims = tuple(int(dim) for dim in target_dims)
+            except Exception:  # noqa: BLE001 - best effort cache population
+                pass
+            else:
+                self._maybe_cache_shape(concrete_dims)
 
         return torch.reshape(input_tensor, list(target_dims))
 
@@ -159,6 +187,7 @@ class OnnxReshape(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: disa
 
         resolved_dims = tuple(dimension for dimension in dims if dimension is not None)
         if not resolved_dims:
+            self._maybe_cache_shape(())
             return torch.ops.aten.view.default(input_tensor, [])
 
         product = 1
@@ -226,6 +255,7 @@ class OnnxReshape(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: disa
                     pass
                 return self._do_reshape(input_tensor, shape_tensor)
 
+        self._maybe_cache_shape(resolved_dims)
         return torch.ops.aten.view.default(input_tensor, list(resolved_dims))
 
 
