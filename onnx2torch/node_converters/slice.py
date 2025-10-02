@@ -7,6 +7,7 @@ __all__ = [
 from typing import List
 from typing import Optional
 from typing import Tuple
+import warnings
 
 import numpy as np
 import torch
@@ -66,10 +67,13 @@ def _materialise_static_slice(
 
     for start, end, axis, step in zip(starts, ends, axes, steps):
         if step == 0:
-            if is_shape_warmup_active():
-                step = 1
-            else:
-                raise ValueError("Slice step cannot be zero.")
+            if not is_shape_warmup_active():
+                warnings.warn(
+                    "Slice step of 0 encountered; treating as 1 for compatibility.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+            step = 1
         if step < 0:
             flip_dims.append(axis)
             start, end, step = -start - 1, -end - 1, -step
@@ -133,6 +137,14 @@ def _apply_dynamic_slice(
                 )
 
         step_int = int(step_value)
+        if step_int == 0:
+            warnings.warn(
+                "Slice step of 0 encountered; treating as 1 for compatibility.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            step_int = 1
+
         if step_int != 1:
             raise NotImplementedError("Dynamic Slice currently supports only step=1.")
 
