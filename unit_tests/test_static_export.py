@@ -35,3 +35,8 @@ def test_exported_program_has_no_sym_constrain(tmp_path):
         and node.target is torch.ops.aten.sym_constrain_range_for_size.default
         for node in exported.graph_module.graph.nodes
     )
+    assert not any(
+        node.op == "call_function"
+        and node.target is torch.ops.aten._assert_scalar.default
+        for node in exported.graph_module.graph.nodes
+    )

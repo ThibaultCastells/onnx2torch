@@ -670,27 +670,35 @@ def _build_example_and_warmup_args(
     return tuple(runtime_tensors), tuple(warmup_tensors)
 
 
-def _strip_scalar_runtime_asserts(exported: torch.export.ExportedProgram) -> None:
+def _strip_runtime_guards(exported: torch.export.ExportedProgram) -> None:
     graph = exported.graph_module.graph
-    assert_nodes = []
-    bool_producers = set()
+    guard_targets = {
+        torch.ops.aten._assert_scalar.default,
+    }
+
+    sym_constrain = getattr(torch.ops.aten, "sym_constrain_range_for_size", None)
+    if sym_constrain is not None:
+        guard_targets.add(sym_constrain.default)
+
+    to_prune = []
+    candidate_parents: set[fx.Node] = set()
 
     for node in list(graph.nodes):
-        if (
-            node.op == "call_function"
-            and node.target is torch.ops.aten._assert_scalar.default
-        ):
-            assert_nodes.append(node)
+        if node.op == "call_function" and node.target in guard_targets:
+            to_prune.append(node)
             for arg in node.args:
                 if isinstance(arg, fx.Node):
-                    bool_producers.add(arg)
+                    candidate_parents.add(arg)
 
-    for node in assert_nodes:
+    if not to_prune:
+        return
+
+    for node in to_prune:
         graph.erase_node(node)
 
-    for node in list(bool_producers):
-        if not node.users:
-            graph.erase_node(node)
+    for parent in list(candidate_parents):
+        if not parent.users:
+            graph.erase_node(parent)
 
     graph.eliminate_dead_code()
     graph.lint()
@@ -828,7 +836,7 @@ def _export_model(
                     module,
                     runtime_args,
                 )
-                _strip_scalar_runtime_asserts(exported)
+                _strip_runtime_guards(exported)
         except Exception as error:  # noqa: BLE001 - want to catch and wrap
             failure_path = _write_failure_details(
                 task,
