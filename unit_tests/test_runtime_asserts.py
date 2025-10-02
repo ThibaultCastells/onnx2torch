@@ -6,7 +6,7 @@ import torch
 
 from onnx2torch.node_converters.expand import OnnxExpand
 
-from run import _build_static_dynamic_shapes, _strip_scalar_runtime_asserts
+from run import _strip_scalar_runtime_asserts
 
 
 @pytest.mark.skipif(
@@ -23,7 +23,6 @@ def test_strip_scalar_runtime_asserts_removes_sym_bool() -> None:
         Model().eval(),
         args,
         strict=True,
-        dynamic_shapes=_build_static_dynamic_shapes(args),
     )
 
     assert any(

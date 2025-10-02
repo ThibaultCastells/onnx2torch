@@ -63,25 +63,7 @@ def test_transformer_encoder_export_roundtrip(tmp_path):
 
     task = run.ModelTask(source=onnx_path, destination=tmp_path / "encoder.pt2")
 
-    example_cfg = run.ExampleInputConfig(
-        default_fill="zeros",
-        overrides={
-            "input_ids": {
-                "shape": [1, 8],
-                "warmup_shape": [1, 8],
-                "dim_labels": ["batch", "sequence_length"],
-            },
-            "attention_mask": {
-                "shape": [1, 8],
-                "warmup_shape": [1, 8],
-                "dim_labels": ["batch", "sequence_length"],
-                "dtype": "bool",
-                "fill": "ones",
-            },
-        },
-        scales={"sequence_length": 8},
-        enable_warmup=False,
-    )
+    example_cfg = run.ExampleInputConfig(default_fill="ones", enable_warmup=False)
     config = run.RunnerConfig(inputs=[], example_inputs=example_cfg)
     run_context = run.RunContext(directory=tmp_path, verbosity=0)
 

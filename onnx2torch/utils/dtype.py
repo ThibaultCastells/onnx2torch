@@ -7,7 +7,7 @@ import numpy as np
 import torch
 
 
-def onnx_dtype_to_torch_dtype(dtype: int) -> Union[torch.dtype, Type[str], Type[bool]]:
+def onnx_dtype_to_torch_dtype(dtype: int) -> Union[torch.dtype, Type[str]]:
     """
     Convert ONNX dtype to PyTorch dtype.
 
@@ -23,7 +23,7 @@ def onnx_dtype_to_torch_dtype(dtype: int) -> Union[torch.dtype, Type[str], Type[
 
     """
     # https://github.com/onnx/onnx/blob/main/onnx/onnx-ml.proto#L485
-    _dtypes: Dict[int, Union[torch.dtype, Type[str], Type[bool]]] = {
+    _dtypes: Dict[int, Union[torch.dtype, Type[str]]] = {
         1: torch.float32,
         2: torch.uint8,
         3: torch.int8,
@@ -32,7 +32,7 @@ def onnx_dtype_to_torch_dtype(dtype: int) -> Union[torch.dtype, Type[str], Type[
         6: torch.int32,
         7: torch.int64,
         8: str,
-        9: bool,
+        9: torch.bool,
         10: torch.float16,
         11: torch.float64,
         # 12: UINT32 is not supported: https://github.com/pytorch/pytorch/issues/58734.

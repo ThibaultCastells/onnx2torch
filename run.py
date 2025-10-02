@@ -7,14 +7,13 @@ import argparse
 import contextlib
 import io
 import logging
-import math
 import shutil
 import traceback
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Dict, Iterator, List, Mapping, Sequence, Tuple
+from typing import Dict, Iterator, List, Sequence, Tuple
 
 import torch
 import torch.fx as fx
@@ -77,10 +76,6 @@ class InputConfig:
 @dataclass
 class ExampleInputConfig:
     default_fill: str = "zeros"
-    overrides: Dict[str, Dict[str, object]] = field(default_factory=dict)
-    scales: Dict[str, int] = field(default_factory=dict)
-    max_total_elements: int = 2_000_000
-    warmup_max_total_elements: int = 131_072
     enable_warmup: bool = True
 
 
@@ -501,52 +496,14 @@ def _load_config(path: Path) -> RunnerConfig:
         raise TypeError('The "conversion" section must be a mapping if provided.')
 
     example_cfg_raw = data.get("example_inputs", {})
-    if isinstance(example_cfg_raw, dict):
-        example_cfg_dict = example_cfg_raw
-        default_fill = example_cfg_dict.get("default_fill", "zeros")
-        overrides = example_cfg_dict.get(
-            "overrides", example_cfg_dict.get("inputs", {})
-        )
-    elif example_cfg_raw in (None, ""):
-        example_cfg_dict = {}
-        default_fill = "zeros"
-        overrides = {}
-    else:
+    if example_cfg_raw in (None, ""):
+        example_cfg_raw = {}
+    if not isinstance(example_cfg_raw, dict):
         raise TypeError('The "example_inputs" section must be a mapping if provided.')
 
-    overrides_final: Dict[str, Dict[str, object]] = {}
-    for key, value in (overrides or {}).items():
-        if value is None:
-            overrides_final[str(key)] = {}
-        elif isinstance(value, dict):
-            overrides_final[str(key)] = dict(value)
-        else:
-            raise TypeError(
-                f"Override for {key!r} must be a mapping, got {type(value).__name__}."
-            )
-
-    scales_raw = example_cfg_dict.get("scales", {})
-    if not isinstance(scales_raw, dict):
-        raise TypeError(
-            'The "scales" entry under "example_inputs" must be a mapping if provided.'
-        )
-
     example_cfg = ExampleInputConfig(
-        default_fill=str(default_fill).lower(),
-        overrides=overrides_final,
-        scales={str(k): int(v) for k, v in scales_raw.items()},
-        max_total_elements=int(
-            example_cfg_dict.get(
-                "max_total_elements", ExampleInputConfig.max_total_elements
-            )
-        ),
-        warmup_max_total_elements=int(
-            example_cfg_dict.get(
-                "warmup_max_total_elements",
-                ExampleInputConfig.warmup_max_total_elements,
-            )
-        ),
-        enable_warmup=bool(example_cfg_dict.get("enable_warmup", True)),
+        default_fill=str(example_cfg_raw.get("default_fill", "zeros")).lower(),
+        enable_warmup=bool(example_cfg_raw.get("enable_warmup", True)),
     )
 
     if example_cfg.default_fill not in SUPPORTED_FILLS:
@@ -633,146 +590,11 @@ def _dim_sizes(value_info: ValueInfoProto) -> List[int]:
     return dims
 
 
-def _apply_dimension_scales(
-    shape: List[int],
-    labels: Sequence[str] | None,
-    scales: Mapping[str, int],
-    input_name: str,
-) -> List[int]:
-    if not labels:
-        return shape
-
-    adjusted = list(shape)
-    for index, label in enumerate(labels):
-        if index >= len(adjusted) or label is None:
-            continue
-        key = str(label)
-        if key not in scales:
-            continue
-        clamp_value = int(scales[key])
-        if clamp_value <= 0:
-            continue
-        if adjusted[index] > clamp_value:
-            LOGGER.warning(
-                "Clamping dimension %s[%s] from %d to %d based on scale hints.",
-                input_name,
-                key,
-                adjusted[index],
-                clamp_value,
-            )
-            adjusted[index] = clamp_value
-    return adjusted
-
-
-def _enforce_element_cap(
-    shape: List[int],
-    cap: int,
-    *,
-    input_name: str,
-    reason: str,
-) -> List[int]:
-    if cap <= 0 or not shape:
-        return shape
-
-    original = list(shape)
-    total_requested = math.prod(original) or 1
-    if total_requested <= cap:
-        return shape
-
-    new_shape = list(original)
-    changed = False
-
-    for index in reversed(range(len(new_shape))):
-        current_total = math.prod(new_shape) or 1
-        if current_total <= cap:
-            break
-        other_prod = math.prod(new_shape[:index] + new_shape[index + 1 :]) or 1
-        max_dim = max(1, cap // other_prod)
-        if max_dim < new_shape[index]:
-            new_shape[index] = max_dim
-            changed = True
-
-    current_total = math.prod(new_shape) or 1
-    if current_total > cap:
-        new_shape = [1] * len(new_shape)
-        current_total = 1
-        changed = True
-
-    if changed:
-        LOGGER.warning(
-            "Input %s requested %d elements; clamped to %d elements (%s cap=%d).",
-            input_name,
-            total_requested,
-            current_total,
-            reason,
-            cap,
-        )
-        LOGGER.debug("Adjusted %s shape from %s to %s", input_name, original, new_shape)
-
-    return new_shape
-
-
-def _parse_scale_overrides(entries: Sequence[str]) -> Dict[str, int]:
-    overrides: Dict[str, int] = {}
-    for entry in entries:
-        if "=" not in entry:
-            raise ValueError(
-                f"Scale override {entry!r} must be in the form <name>=<value>."
-            )
-        key, value = entry.split("=", 1)
-        key = key.strip()
-        if not key:
-            raise ValueError(f"Scale override {entry!r} is missing a name.")
-        try:
-            overrides[key] = int(value)
-        except ValueError as exc:  # noqa: PERF203 - provide clearer message
-            raise ValueError(
-                f"Scale override {entry!r} must have an integer value."
-            ) from exc
-    return overrides
-
-
-def _resolve_dtype(
-    name: str, elem_type: int, override: Dict[str, object]
-) -> torch.dtype:
-    dtype_override = override.get("dtype")
-    if dtype_override is not None:
-        torch_dtype = _dtype_from_string(str(dtype_override))
-        LOGGER.debug("Using dtype override for %s: %s", name, torch_dtype)
-        return torch_dtype
-
+def _resolve_input_dtype(name: str, elem_type: int) -> torch.dtype:
     torch_dtype = onnx_dtype_to_torch_dtype(elem_type)
-    if torch_dtype in (str, bool):
+    if not isinstance(torch_dtype, torch.dtype):
         raise ValueError(f"Input {name} has unsupported dtype {torch_dtype}.")
     return torch_dtype
-
-
-def _dtype_from_string(value: str) -> torch.dtype:
-    key = value.strip().lower()
-    aliases = {
-        "float": torch.float32,
-        "float32": torch.float32,
-        "fp32": torch.float32,
-        "half": torch.float16,
-        "float16": torch.float16,
-        "fp16": torch.float16,
-        "bfloat16": torch.bfloat16,
-        "bf16": torch.bfloat16,
-        "double": torch.float64,
-        "float64": torch.float64,
-        "int": torch.int32,
-        "int32": torch.int32,
-        "int64": torch.int64,
-        "long": torch.int64,
-        "int16": torch.int16,
-        "short": torch.int16,
-        "int8": torch.int8,
-        "uint8": torch.uint8,
-        "bool": torch.bool,
-    }
-    if key not in aliases:
-        raise ValueError(f"Unsupported dtype override: {value}")
-    return aliases[key]
 
 
 def _materialise_example_tensor(
@@ -800,58 +622,15 @@ def _materialise_example_tensor(
 def _create_example_tensors(
     name: str,
     value_info: ValueInfoProto,
-    override: Dict[str, object],
     example_cfg: ExampleInputConfig,
     device: str,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    if "shape" in override:
-        runtime_shape = [int(size) for size in override["shape"]]
-    else:
-        runtime_shape = _dim_sizes(value_info)
-        if override.get("ensure_min_dim"):
-            min_dim = int(override["ensure_min_dim"])
-            runtime_shape = [max(dim, min_dim) for dim in runtime_shape]
+    runtime_shape = [max(1, int(dim)) for dim in _dim_sizes(value_info)]
+    warmup_shape = list(runtime_shape)
 
-    warmup_shape_override = override.get("warmup_shape")
-    if warmup_shape_override is not None:
-        warmup_shape = [int(size) for size in warmup_shape_override]
-    else:
-        warmup_shape = list(runtime_shape)
+    torch_dtype = _resolve_input_dtype(name, value_info.type.tensor_type.elem_type)
 
-    labels_raw = override.get("dim_labels")
-    labels: List[str | None] | None = None
-    if labels_raw is not None:
-        labels = []
-        for entry in labels_raw:
-            labels.append(None if entry is None else str(entry))
-
-    runtime_shape = [max(1, int(dim)) for dim in runtime_shape]
-    warmup_shape = [max(1, int(dim)) for dim in warmup_shape]
-
-    runtime_shape = _apply_dimension_scales(
-        runtime_shape, labels, example_cfg.scales, name
-    )
-    warmup_shape = _apply_dimension_scales(
-        warmup_shape, labels, example_cfg.scales, f"{name} (warmup)"
-    )
-
-    runtime_cap = int(
-        override.get("max_total_elements", example_cfg.max_total_elements)
-    )
-    warmup_cap = int(
-        override.get("warmup_max_total_elements", example_cfg.warmup_max_total_elements)
-    )
-
-    runtime_shape = _enforce_element_cap(
-        runtime_shape, runtime_cap, input_name=name, reason="runtime"
-    )
-    warmup_shape = _enforce_element_cap(
-        warmup_shape, warmup_cap, input_name=name, reason="warmup"
-    )
-
-    torch_dtype = _resolve_dtype(name, value_info.type.tensor_type.elem_type, override)
-
-    fill = str(override.get("fill", example_cfg.default_fill)).lower()
+    fill = example_cfg.default_fill
     if fill not in SUPPORTED_FILLS:
         raise ValueError(f"Unsupported fill strategy {fill!r} for input {name}.")
 
@@ -869,7 +648,6 @@ def _build_example_and_warmup_args(
     model: ModelProto, config: RunnerConfig
 ) -> Tuple[Tuple[torch.Tensor, ...], Tuple[torch.Tensor, ...]]:
     initializer_names = {initializer.name for initializer in model.graph.initializer}
-    overrides = config.example_inputs.overrides
     runtime_tensors: List[torch.Tensor] = []
     warmup_tensors: List[torch.Tensor] = []
 
@@ -877,11 +655,9 @@ def _build_example_and_warmup_args(
         if value_info.name in initializer_names:
             continue
 
-        override = overrides.get(value_info.name, {})
         runtime_tensor, warmup_tensor = _create_example_tensors(
             name=value_info.name,
             value_info=value_info,
-            override=override,
             example_cfg=config.example_inputs,
             device=config.device,
         )
@@ -892,19 +668,6 @@ def _build_example_and_warmup_args(
         return tuple(runtime_tensors), tuple()
 
     return tuple(runtime_tensors), tuple(warmup_tensors)
-
-
-def _build_static_dynamic_shapes(
-    args: Tuple[torch.Tensor, ...],
-) -> Tuple[Dict[int, int] | None, ...]:
-    specs: List[Dict[int, int] | None] = []
-    for tensor in args:
-        if isinstance(tensor, torch.Tensor):
-            dims = {index: int(size) for index, size in enumerate(tensor.shape)}
-            specs.append(dims)
-        else:
-            specs.append(None)
-    return tuple(specs)
 
 
 def _strip_scalar_runtime_asserts(exported: torch.export.ExportedProgram) -> None:
@@ -1061,11 +824,9 @@ def _export_model(
             with contextlib.redirect_stdout(captured), contextlib.redirect_stderr(
                 captured
             ):
-                dynamic_shapes = _build_static_dynamic_shapes(runtime_args)
                 exported = export_program(
                     module,
                     runtime_args,
-                    dynamic_shapes=dynamic_shapes,
                 )
                 _strip_scalar_runtime_asserts(exported)
         except Exception as error:  # noqa: BLE001 - want to catch and wrap
@@ -1109,13 +870,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "-v", "--verbose", action="count", default=0, help="Increase logging verbosity."
     )
-    parser.add_argument(
-        "--scale",
-        action="append",
-        default=[],
-        help="Override dimension scale hints (name=value). Can be repeated.",
-    )
-
     args = parser.parse_args(argv)
 
     cfg_path = args.cfg.expanduser()
@@ -1125,11 +879,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     LOGGER.info("Run logs directory: %s", run_context.directory)
 
     config = _load_config(cfg_path)
-    if args.scale:
-        scale_overrides = _parse_scale_overrides(args.scale)
-        if scale_overrides:
-            config.example_inputs.scales.update(scale_overrides)
-            LOGGER.info("Applied scale overrides: %s", scale_overrides)
     _persist_run_config(cfg_path, run_context)
     tasks = _collect_tasks(config)
 
