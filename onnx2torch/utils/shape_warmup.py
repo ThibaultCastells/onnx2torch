@@ -455,6 +455,8 @@ _SHAPE_WARMUP_ACTIVE: contextvars.ContextVar[bool] = contextvars.ContextVar(
 
 def is_shape_warmup_active() -> bool:
     """Return True when the shape warmup dispatch mode is active."""
+    if getattr(torch, "_dynamo", None) is not None and torch._dynamo.is_compiling():
+        return False
 
     return _SHAPE_WARMUP_ACTIVE.get()
 

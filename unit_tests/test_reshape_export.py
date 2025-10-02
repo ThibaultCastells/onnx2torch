@@ -16,3 +16,19 @@ def test_reshape_supports_export_with_zero_copy_dims():
 
     result = exported.module()(input_tensor, shape)
     assert result.shape == (2, 15)
+
+
+def test_static_shape_export_keeps_functional_ops():
+    module = OnnxReshape(static_shape=(1, -1))
+
+    input_tensor = torch.randn(1, 8)
+    shape = torch.tensor([1, -1], dtype=torch.int64)
+
+    exported = torch.export.export(module, (input_tensor, shape))
+    detach_ops = [
+        node
+        for node in exported.graph_module.graph.nodes
+        if node.target == torch.ops.aten.detach_.default
+    ]
+
+    assert not detach_ops

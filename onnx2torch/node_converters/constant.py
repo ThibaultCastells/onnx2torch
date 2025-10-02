@@ -2,7 +2,7 @@ __all__ = [
     "OnnxConstant",
 ]
 
-from typing import Any
+from typing import Any, Optional
 
 import torch
 from torch import nn
@@ -28,11 +28,27 @@ _CONSTANT_PARSING_MAPPING = {
 class OnnxConstant(nn.Module, OnnxToTorchModule):  # pylint: disable=missing-docstring
     def __init__(self, value: Any):
         super().__init__()
-        # We need it for placing constant to cuda.
+        self._value_dtype: Optional[torch.dtype] = None
+        self._literal_value: Any = None
+
         if isinstance(value, torch.Tensor):
-            self.register_buffer("value", value)
+            self._value_dtype = value.dtype
+            stored_value = (
+                value.to(dtype=torch.uint8) if value.dtype == torch.bool else value
+            )
+            self.register_buffer("_value_tensor", stored_value)
         else:
-            self.value = value
+            self._literal_value = value
+
+    @property
+    def value(self) -> Any:
+        if hasattr(self, "_value_tensor"):
+            tensor = getattr(self, "_value_tensor")
+            if self._value_dtype == torch.bool:
+                return tensor.to(dtype=torch.bool)
+            return tensor
+
+        return self._literal_value
 
     def forward(self) -> Any:  # pylint: disable=missing-function-docstring
         return self.value

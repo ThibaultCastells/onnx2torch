@@ -25,7 +25,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     'pytest',
-    'black',
+    'tqdm',
     'isort',
     'pylint',
     'pre-commit',

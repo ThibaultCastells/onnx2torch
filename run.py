@@ -10,12 +10,14 @@ import logging
 import math
 import shutil
 import traceback
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Dict, Iterator, List, Mapping, Sequence, Tuple
 
 import torch
+import torch.fx as fx
 import yaml
 import onnx
 from onnx.onnx_ml_pb2 import ModelProto, ValueInfoProto
@@ -48,6 +50,21 @@ LOGGER = logging.getLogger("onnx2torch.runner")
 DEFAULT_OUTPUT_DIR = Path("data/executorch")
 RUN_LOG_ROOT = Path("logs/run_logs")
 SUPPORTED_FILLS = {"zeros", "ones", "random"}
+
+
+class BoolTypedStorageError(RuntimeError):
+    """Raised when legacy serialization encounters boolean typed storage."""
+
+
+def _resolve_save_callable(exported: torch.export.ExportedProgram):
+    if export_save is not None:
+        return lambda program, path: export_save(program, str(path))
+    if hasattr(exported, "save"):
+        return lambda program, path: program.save(str(path))  # type: ignore[attr-defined]
+    raise RuntimeError(
+        "This version of torch does not support saving ExportedProgram instances. "
+        "Please upgrade torch to >=2.1."
+    )
 
 
 @dataclass
@@ -149,19 +166,290 @@ def _setup_logging(run_context: RunContext) -> None:
 
 
 def _save_exported_program(
+    exported: torch.export.ExportedProgram,
+    destination: Path,
+    *,
+    task: "ModelTask",
+    run_context: "RunContext",
+) -> None:
+    """Persist an ExportedProgram and verify the resulting artifact."""
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with _serialize_bool_storage_as_untyped():
+        try:
+            _save_without_typed_storage(exported, destination)
+        except (
+            ImportError,
+            AttributeError,
+        ) as error:  # pragma: no cover - torch internals missing
+            LOGGER.warning(
+                "Falling back to legacy torch.export saving path without typed-storage shim; "
+                "boolean initializers may fail to load on older runtimes."
+            )
+            save_callable = _resolve_save_callable(exported)
+            save_callable(exported, destination)
+            LOGGER.debug("Saved %s using fallback path after %s", destination, error)
+
+    _verify_export_artifact(destination, task, run_context)
+
+
+def _save_without_typed_storage(
     exported: torch.export.ExportedProgram, destination: Path
 ) -> None:
-    """Persist an ExportedProgram across torch versions."""
+    """Save ExportedProgram forcing legacy tensor storage format."""
 
-    if export_save is not None:
-        export_save(exported, str(destination))
-    elif hasattr(exported, "save"):
-        exported.save(str(destination))  # type: ignore[attr-defined]
-    else:  # pragma: no cover - defensive guard for unexpected API changes
-        raise RuntimeError(
-            "This version of torch does not support saving ExportedProgram instances. "
-            "Please upgrade torch to >=2.1."
+    from torch._export.serde import serialize as serde_module
+
+    try:
+        FakeTensor = serde_module.FakeTensor
+        _reduce_fake_tensor = serde_module._reduce_fake_tensor
+        DEFAULT_PICKLE_PROTOCOL = serde_module.DEFAULT_PICKLE_PROTOCOL
+    except AttributeError as exc:  # pragma: no cover - internal API change
+        raise AttributeError("serialize module missing FakeTensor helpers") from exc
+
+    import copyreg
+    import io
+    import pickle
+
+    from torch.serialization import _legacy_save
+
+    original_serializer = serde_module.serialize_torch_artifact
+
+    def _legacy_serialize(
+        artifact, pickle_protocol: int = DEFAULT_PICKLE_PROTOCOL
+    ) -> bytes:
+        if artifact is None:
+            return b""
+
+        assert (  # pragma: no cover - defensive check
+            FakeTensor not in copyreg.dispatch_table
+        ), "Refusing to stomp on existing FakeTensor reducer"
+
+        try:
+            copyreg.pickle(FakeTensor, _reduce_fake_tensor)
+            buffer = io.BytesIO()
+            _legacy_save(artifact, buffer, pickle, pickle_protocol)
+            return buffer.getvalue()
+        finally:
+            del copyreg.dispatch_table[FakeTensor]
+
+    save_callable = _resolve_save_callable(exported)
+
+    try:
+        serde_module.serialize_torch_artifact = _legacy_serialize  # type: ignore[assignment]
+        save_callable(exported, destination)
+    finally:
+        serde_module.serialize_torch_artifact = original_serializer  # type: ignore[assignment]
+
+
+@contextmanager
+def _serialize_bool_storage_as_untyped() -> Iterator[None]:
+    typed_storage = getattr(torch.storage, "TypedStorage", None)
+    if typed_storage is None:
+        yield
+        return
+
+    original_reduce_ex = getattr(typed_storage, "__reduce_ex__", None)
+    original_reduce = getattr(typed_storage, "__reduce__", None)
+    original_pickle_storage_type = getattr(typed_storage, "pickle_storage_type", None)
+    original_private_pickle_storage_type = getattr(
+        typed_storage, "_pickle_storage_type", None
+    )
+
+    if (
+        original_reduce_ex is None
+        or original_reduce is None
+        or original_pickle_storage_type is None
+        or original_private_pickle_storage_type is None
+    ):
+        yield
+        return
+
+    def _reduce_ex(self, protocol):  # type: ignore[override]
+        dtype = getattr(self, "dtype", None)
+        if dtype is torch.bool:
+            return self.untyped().__reduce_ex__(protocol)  # type: ignore[attr-defined]
+        return original_reduce_ex(self, protocol)
+
+    def _reduce(self):  # type: ignore[override]
+        dtype = getattr(self, "dtype", None)
+        if dtype is torch.bool:
+            return self.untyped().__reduce__()  # type: ignore[attr-defined]
+        return original_reduce(self)
+
+    typed_storage.__reduce_ex__ = _reduce_ex  # type: ignore[attr-defined]
+    typed_storage.__reduce__ = _reduce  # type: ignore[attr-defined]
+    typed_storage.pickle_storage_type = (  # type: ignore[attr-defined]
+        lambda self: "UntypedStorage"
+        if getattr(self, "dtype", None) is torch.bool
+        else original_pickle_storage_type(self)
+    )
+    typed_storage._pickle_storage_type = (  # type: ignore[attr-defined]
+        lambda self: "UntypedStorage"
+        if getattr(self, "dtype", None) is torch.bool
+        else original_private_pickle_storage_type(self)
+    )
+    try:
+        yield
+    finally:
+        typed_storage.__reduce_ex__ = original_reduce_ex  # type: ignore[attr-defined]
+        typed_storage.__reduce__ = original_reduce  # type: ignore[attr-defined]
+        typed_storage.pickle_storage_type = original_pickle_storage_type  # type: ignore[attr-defined]
+        typed_storage._pickle_storage_type = (  # type: ignore[attr-defined]
+            original_private_pickle_storage_type
         )
+
+
+@contextmanager
+def _suppress_export_deserialize_warnings():
+    logger = logging.getLogger("torch._export.serde.serialize")
+    previous = logger.level
+    logger.setLevel(logging.ERROR)
+    try:
+        yield
+    finally:
+        logger.setLevel(previous)
+
+
+@contextmanager
+def _fail_on_bool_typed_storage() -> Iterator[None]:
+    original_new = torch.storage.TypedStorage.__new__
+
+    BOOL_METADATA_NAMES = {"boolean", "bool", "torch.bool"}
+    BOOL_SCALAR_CODES = {11}  # c10::ScalarType::Bool stable tag
+
+    def _looks_like_bool_metadata(candidate: object) -> bool:
+        if isinstance(candidate, dict):
+            scalar_type = candidate.get("_scalar_type")
+            if isinstance(scalar_type, int) and scalar_type in BOOL_SCALAR_CODES:
+                return True
+            if isinstance(scalar_type, str) and "bool" in scalar_type.lower():
+                return True
+
+            name = candidate.get("_name")
+            if isinstance(name, str) and name.lower() in BOOL_METADATA_NAMES:
+                return True
+        return False
+
+    def _iter_dtype_candidates(*values: object) -> Iterator[torch.dtype]:
+        for value in values:
+            if isinstance(value, torch.dtype):
+                yield value
+
+    def _guard(cls, *args, **kwargs):  # type: ignore[override]
+        dtype = kwargs.get("dtype")
+        if not isinstance(dtype, torch.dtype):
+            dtype = next(_iter_dtype_candidates(*args), None)
+
+        if dtype is torch.bool:
+            raise BoolTypedStorageError(
+                "Boolean TypedStorage encountered during load."  # pragma: no cover - guard path
+            )
+
+        if dtype is None:
+            metadata_values = list(args) + list(kwargs.values())
+            if any(_looks_like_bool_metadata(value) for value in metadata_values):
+                raise BoolTypedStorageError(
+                    "Boolean TypedStorage encountered during load."  # pragma: no cover - guard path
+                )
+
+        return original_new(cls, *args, **kwargs)
+
+    torch.storage.TypedStorage.__new__ = _guard  # type: ignore[assignment]
+    try:
+        yield
+    finally:
+        torch.storage.TypedStorage.__new__ = original_new  # type: ignore[assignment]
+
+
+def _verify_export_artifact(
+    destination: Path, task: "ModelTask", run_context: "RunContext"
+) -> None:
+    try:
+        from torch.export import load as export_load
+    except (ImportError, AttributeError):  # pragma: no cover - very old torch
+        LOGGER.debug("torch.export.load unavailable; skipping artifact verification")
+        return
+
+    try:
+        with _suppress_export_deserialize_warnings():
+            with _fail_on_bool_typed_storage():
+                export_load(str(destination))
+    except BoolTypedStorageError as error:
+        failure_path = _write_failure_details(
+            task,
+            run_context,
+            error,
+            captured_output="",
+        )
+        LOGGER.error(
+            "Saved artifact %s contains boolean typed storage. Details saved to %s",
+            destination,
+            failure_path,
+        )
+        raise ExportError(
+            source=task.source,
+            detail_path=failure_path,
+            message=(
+                f"Exported artifact at {destination} stores boolean tensors using an "
+                "unsupported TypedStorage encoding."
+            ),
+        ) from None
+    except Exception as error:  # noqa: BLE001 - propagate verification failure details
+        failure_path = _write_failure_details(
+            task,
+            run_context,
+            error,
+            captured_output="",
+        )
+        LOGGER.error(
+            "Failed to reload %s for post-export validation. See %s",
+            destination,
+            failure_path,
+        )
+        raise ExportError(
+            source=task.source,
+            detail_path=failure_path,
+            message=f"Failed to reload exported artifact {destination}",
+        ) from None
+
+
+def _run_export_verifier(
+    exported: torch.export.ExportedProgram,
+    task: "ModelTask",
+    run_context: "RunContext",
+) -> None:
+    try:
+        from torch._export.verifier import SpecViolationError, load_verifier
+    except ImportError:  # pragma: no cover - verifier removed or unavailable
+        LOGGER.debug("torch._export.verifier unavailable; skipping verification")
+        return
+
+    try:
+        verifier_cls = load_verifier("ATEN")
+    except KeyError:  # pragma: no cover - dialect missing in this torch build
+        LOGGER.debug("ATEN verifier not registered; skipping verification")
+        return
+
+    verifier = verifier_cls()
+
+    try:
+        verifier.check(exported)
+    except SpecViolationError as error:
+        failure_path = _write_failure_details(
+            task,
+            run_context,
+            error,
+            captured_output="",
+        )
+        LOGGER.warning(
+            "ATen verifier reported issues for %s. Details saved to %s",
+            task.source,
+            failure_path,
+        )
+        return
+
+    LOGGER.debug("ATen verifier passed for %s", task.source)
 
 
 def _load_config(path: Path) -> RunnerConfig:
@@ -606,6 +894,46 @@ def _build_example_and_warmup_args(
     return tuple(runtime_tensors), tuple(warmup_tensors)
 
 
+def _build_static_dynamic_shapes(
+    args: Tuple[torch.Tensor, ...],
+) -> Tuple[Dict[int, int] | None, ...]:
+    specs: List[Dict[int, int] | None] = []
+    for tensor in args:
+        if isinstance(tensor, torch.Tensor):
+            dims = {index: int(size) for index, size in enumerate(tensor.shape)}
+            specs.append(dims)
+        else:
+            specs.append(None)
+    return tuple(specs)
+
+
+def _strip_scalar_runtime_asserts(exported: torch.export.ExportedProgram) -> None:
+    graph = exported.graph_module.graph
+    assert_nodes = []
+    bool_producers = set()
+
+    for node in list(graph.nodes):
+        if (
+            node.op == "call_function"
+            and node.target is torch.ops.aten._assert_scalar.default
+        ):
+            assert_nodes.append(node)
+            for arg in node.args:
+                if isinstance(arg, fx.Node):
+                    bool_producers.add(arg)
+
+    for node in assert_nodes:
+        graph.erase_node(node)
+
+    for node in list(bool_producers):
+        if not node.users:
+            graph.erase_node(node)
+
+    graph.eliminate_dead_code()
+    graph.lint()
+    exported.graph_module.recompile()
+
+
 def _write_failure_details(
     task: ModelTask,
     run_context: RunContext,
@@ -733,7 +1061,13 @@ def _export_model(
             with contextlib.redirect_stdout(captured), contextlib.redirect_stderr(
                 captured
             ):
-                exported = export_program(module, runtime_args)
+                dynamic_shapes = _build_static_dynamic_shapes(runtime_args)
+                exported = export_program(
+                    module,
+                    runtime_args,
+                    dynamic_shapes=dynamic_shapes,
+                )
+                _strip_scalar_runtime_asserts(exported)
         except Exception as error:  # noqa: BLE001 - want to catch and wrap
             failure_path = _write_failure_details(
                 task,
@@ -754,8 +1088,14 @@ def _export_model(
         else:
             LOGGER.debug("Finished export_program for %s", task.source)
 
-    task.destination.parent.mkdir(parents=True, exist_ok=True)
-    _save_exported_program(exported, task.destination)
+    _run_export_verifier(exported, task, run_context)
+
+    _save_exported_program(
+        exported,
+        task.destination,
+        task=task,
+        run_context=run_context,
+    )
     LOGGER.info("Saved %s", task.destination)
 
 

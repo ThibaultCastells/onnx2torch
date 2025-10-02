@@ -25,17 +25,27 @@ class OnnxConstantOfShape(nn.Module, OnnxToTorchModule):  # pylint: disable=miss
         if value.numel() != 1:
             raise ValueError('parameter "value" must be scalar')
 
-        self.value: torch.Tensor
-        self.register_buffer("value", value)
+        self._value_dtype = value.dtype
+        stored_value = (
+            value.to(dtype=torch.uint8) if value.dtype == torch.bool else value
+        )
+        self.register_buffer("_value_tensor", stored_value)
+
+    @property
+    def value(self) -> torch.Tensor:
+        if self._value_dtype == torch.bool:
+            return self._value_tensor.to(dtype=torch.bool)
+        return self._value_tensor
 
     def forward(self, shape: torch.Tensor) -> torch.Tensor:  # pylint: disable=missing-function-docstring
-        fill_value = self.value.item()
+        fill_tensor = self.value
+        fill_value = fill_tensor.item()
 
         return torch.full(
             size=torch.Size(shape),
-            fill_value=int(fill_value) if isinstance(fill_value, bool) else fill_value,
-            dtype=self.value.dtype,
-            device=self.value.device,
+            fill_value=fill_value,
+            dtype=self._value_dtype,
+            device=self._value_tensor.device,
         )
 
 

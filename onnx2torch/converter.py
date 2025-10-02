@@ -179,13 +179,30 @@ def convert(  # pylint: disable=too-many-locals, too-many-branches, too-many-sta
                     )
                     torch_buffer_name = f"onnx_initializer_{len_torch_initializers}"
                     if value_name not in torch_nodes:
+                        initializer_tensor = onnx_graph.initializers[
+                            value_name
+                        ].to_torch()
+                        requires_bool_cast = initializer_tensor.dtype == torch.bool
+                        stored_tensor = (
+                            initializer_tensor.to(dtype=torch.uint8)
+                            if requires_bool_cast
+                            else initializer_tensor
+                        )
+
                         torch_initializers.add_initializer(
                             torch_buffer_name,
-                            onnx_graph.initializers[value_name].to_torch(),
+                            stored_tensor,
                         )
-                        torch_nodes[torch_buffer_name] = torch_graph.get_attr(
+
+                        attr_node = torch_graph.get_attr(
                             f"initializers.{torch_buffer_name}"
                         )
+                        if requires_bool_cast:
+                            attr_node = torch_graph.call_method(
+                                "to",
+                                args=(attr_node, torch.bool),
+                            )
+                        torch_nodes[torch_buffer_name] = attr_node
                     args.append(torch_nodes[torch_buffer_name])
 
                 elif value_type == ValueType.EMPTY:

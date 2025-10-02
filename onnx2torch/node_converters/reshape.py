@@ -39,6 +39,30 @@ class OnnxReshape(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: disa
         self._cached_target_shape = tuple(dims)
 
     @staticmethod
+    def _static_shape_tensor(
+        dims: Tuple[int, ...],
+        target_device: torch.device,
+    ) -> torch.Tensor:
+        # Materialise static shape values via functional ops to avoid inplace detach during export.
+        dtype = torch.int64
+
+        if not dims:
+            shape_tensor = torch.ops.aten.zeros.default((0,), dtype=dtype)
+        else:
+            scalars = [
+                torch.ops.aten.scalar_tensor.default(dim, dtype=dtype) for dim in dims
+            ]
+            shape_tensor = torch.ops.aten.stack.default(scalars, 0)
+
+        if shape_tensor.device != target_device:
+            try:
+                shape_tensor = shape_tensor.to(device=target_device)
+            except (RuntimeError, TypeError):
+                pass
+
+        return shape_tensor
+
+    @staticmethod
     def _input_shape_tensor(
         input_tensor: torch.Tensor,
         dtype: torch.dtype,
@@ -201,11 +225,9 @@ class OnnxReshape(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: disa
             input_numel_int = None
 
         if input_numel_int is None:
-            shape_tensor = torch.tensor(self._static_shape, dtype=torch.int64)
-            try:
-                shape_tensor = shape_tensor.to(device=input_tensor.device)
-            except (RuntimeError, TypeError):
-                pass
+            shape_tensor = self._static_shape_tensor(
+                self._static_shape, input_tensor.device
+            )
             return self._do_reshape(input_tensor, shape_tensor)
 
         if product != input_numel_int:
@@ -215,29 +237,23 @@ class OnnxReshape(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: disa
             )
             candidate_value = dims_list[largest_index]
             if candidate_value == 0:
-                shape_tensor = torch.tensor(self._static_shape, dtype=torch.int64)
-                try:
-                    shape_tensor = shape_tensor.to(device=input_tensor.device)
-                except (RuntimeError, TypeError):
-                    pass
+                shape_tensor = self._static_shape_tensor(
+                    self._static_shape, input_tensor.device
+                )
                 return self._do_reshape(input_tensor, shape_tensor)
 
             divisor = product // candidate_value
             if divisor == 0 or input_numel_int % divisor != 0:
-                shape_tensor = torch.tensor(self._static_shape, dtype=torch.int64)
-                try:
-                    shape_tensor = shape_tensor.to(device=input_tensor.device)
-                except (RuntimeError, TypeError):
-                    pass
+                shape_tensor = self._static_shape_tensor(
+                    self._static_shape, input_tensor.device
+                )
                 return self._do_reshape(input_tensor, shape_tensor)
 
             inferred_dim = input_numel_int // divisor
             if inferred_dim <= 0:
-                shape_tensor = torch.tensor(self._static_shape, dtype=torch.int64)
-                try:
-                    shape_tensor = shape_tensor.to(device=input_tensor.device)
-                except (RuntimeError, TypeError):
-                    pass
+                shape_tensor = self._static_shape_tensor(
+                    self._static_shape, input_tensor.device
+                )
                 return self._do_reshape(input_tensor, shape_tensor)
 
             dims_list[largest_index] = inferred_dim
@@ -248,11 +264,9 @@ class OnnxReshape(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: disa
                 product *= dimension
 
             if product != input_numel_int:
-                shape_tensor = torch.tensor(self._static_shape, dtype=torch.int64)
-                try:
-                    shape_tensor = shape_tensor.to(device=input_tensor.device)
-                except (RuntimeError, TypeError):
-                    pass
+                shape_tensor = self._static_shape_tensor(
+                    self._static_shape, input_tensor.device
+                )
                 return self._do_reshape(input_tensor, shape_tensor)
 
         self._maybe_cache_shape(resolved_dims)
