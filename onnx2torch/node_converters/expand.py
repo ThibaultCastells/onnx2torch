@@ -40,9 +40,13 @@ class OnnxExpand(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: disab
                 )
 
             if target_rank > input_rank:
-                leading_ones = (1,) * (target_rank - input_rank)
-                input_tensor_for_expand = input_tensor.reshape(
-                    *leading_ones, *input_tensor.shape
+                current_shape = [
+                    torch.ops.aten.sym_size.int(input_tensor, index)
+                    for index in range(input_rank)
+                ]
+                reshape_dims = [1] * (target_rank - input_rank) + current_shape
+                input_tensor_for_expand = torch.ops.aten.view.default(
+                    input_tensor, reshape_dims
                 )
             else:
                 input_tensor_for_expand = input_tensor

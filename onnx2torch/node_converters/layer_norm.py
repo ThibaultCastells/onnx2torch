@@ -50,7 +50,11 @@ def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:
     axis = node_attributes.get("axis", AXIS_DEFAULT_VALUE)
     epsilon = node_attributes.get("epsilon", EPSILON_DEFAULT_VALUE)
 
-    if all(value_name in graph.initializers for value_name in node.input_values[1:]):
+    has_value_info = node.input_values[0] in graph.value_info
+
+    if has_value_info and all(
+        value_name in graph.initializers for value_name in node.input_values[1:]
+    ):
         input_value_info = graph.value_info[node.input_values[0]]
         input_shape = get_shape_from_value_info(input_value_info)
 
@@ -72,8 +76,6 @@ def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:
             inputs=(node.input_values[0],), outputs=node.output_values
         )
     else:
-        input_value_info = graph.value_info[node.input_values[0]]
-        input_shape = get_shape_from_value_info(input_value_info)
         torch_module = OnnxLayerNorm(axis=axis, epsilon=epsilon)
         onnx_mapping = onnx_mapping_from_node(node)
 

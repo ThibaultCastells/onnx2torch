@@ -66,15 +66,23 @@ The `run.py` helper script converts one or more ONNX models to `torch.export` bu
 python run.py --cfg cfg/example.yml
 ```
 
-When an ONNX model does not embed static input dimensions, list them under the `input_shapes` section of the config. Use the ONNX file path as the key (relative to the working directory) and provide per-input shapes, for example:
+Adjust per-input example tensors under the `example_inputs` section. Each override can define a `shape` for the exported program, an optional `warmup_shape` used during the lightweight warm-up pass, and dimension labels that reference shared scale knobs. The runner automatically clamps large shapes to avoid allocating impractically large tensors.
 
 ```yaml
-input_shapes:
-  data/onnx/model_without_shapes.onnx:
-    input_1: [1, 3, 224, 224]
+example_inputs:
+  default_fill: zeros
+  overrides:
+    input_1:
+      shape: [1, 3, 4096]
+      warmup_shape: [1, 3, 512]
+      dim_labels: [batch, channels, sequence_length]
+  scales:
+    sequence_length: 2048
+  max_total_elements: 2000000
+  warmup_max_total_elements: 262144
 ```
 
-The converter validates that every shape-less model referenced in the config supplies these overrides before running [`onnxsim.simplify`](https://github.com/daquexian/onnx-simplifier) to bake the dimensions into the graph.
+The `scales` mapping exposes friendly knobs (e.g. `--scale sequence_length=512`) that clamp the labelled dimensions, while the element caps provide a final safeguard against excessive allocations. Running the exporter now requires PyTorch 2.3 or newer so that the `torch.export` APIs and SymInt-aware utilities are available.
 
 ## How to add new operations to converter
 

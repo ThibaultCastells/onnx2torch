@@ -9,14 +9,6 @@ from typing import Tuple
 import torch
 from torch import nn
 
-try:  # pragma: no cover - older torch versions
-    from torch._dynamo import is_compiling as _dynamo_is_compiling
-except ImportError:  # pragma: no cover - fallback when dynamo is unavailable
-
-    def _dynamo_is_compiling() -> bool:
-        return False
-
-
 from onnx2torch.node_converters.registry import add_converter
 from onnx2torch.onnx_graph import OnnxGraph
 from onnx2torch.onnx_graph import ValueType
@@ -26,11 +18,6 @@ from onnx2torch.utils.common import onnx_mapping_from_node
 from onnx2torch.utils.custom_export_to_onnx import DefaultExportToOnnx
 from onnx2torch.utils.custom_export_to_onnx import OnnxToTorchModuleWithCustomExport
 from onnx2torch.utils.shape_utils import shape_tensor_to_sequence
-
-try:  # pragma: no cover - FakeTensor may be unavailable on older torch releases
-    from torch._subclasses.fake_tensor import FakeTensor
-except ImportError:  # pragma: no cover - keep isinstance checks safe
-    FakeTensor = ()  # type: ignore[assignment]
 
 
 class OnnxReshape(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: disable=missing-class-docstring
@@ -48,31 +35,32 @@ class OnnxReshape(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: disa
         if target_length == 0:
             return torch.zeros((0,), dtype=dtype, device=device)
 
-        input_rank = input_tensor.dim()
+        dims = [
+            torch.ops.aten.scalar_tensor.default(
+                torch.ops.aten.sym_size.int(input_tensor, index),
+                dtype=torch.int64,
+                device=device,
+            )
+            for index in range(input_tensor.dim())
+        ]
 
-        if _dynamo_is_compiling():
-            parts = []
-            for index in range(target_length):
-                if index < input_rank:
-                    dim_value = torch.ops.aten.sym_size.int(input_tensor, index)
-                else:
-                    dim_value = 1
-                parts.append(
-                    torch.ops.aten.scalar_tensor.default(
-                        dim_value,
-                        dtype=dtype,
-                        device=device,
-                    )
-                )
-            return torch.stack(parts)
-
-        base_dims = list(input_tensor.shape)
-        if target_length <= input_rank:
-            dims = base_dims[:target_length]
+        if dims:
+            shape_tensor = torch.ops.aten.stack.default(dims, 0)
         else:
-            dims = base_dims + [1] * (target_length - input_rank)
+            shape_tensor = torch.zeros((0,), dtype=torch.int64, device=device)
 
-        return torch.tensor(dims, dtype=dtype, device=device)
+        current_length = int(shape_tensor.numel())
+        if current_length == target_length:
+            return shape_tensor.to(dtype=dtype)
+
+        if current_length > target_length:
+            trimmed = torch.ops.aten.slice.Tensor(shape_tensor, 0, 0, target_length, 1)
+            return trimmed.to(dtype=dtype)
+
+        pad_length = target_length - current_length
+        padding = torch.ones((pad_length,), dtype=shape_tensor.dtype, device=device)
+        padded = torch.cat((shape_tensor, padding))
+        return padded.to(dtype=dtype)
 
     @classmethod
     def _do_reshape(
@@ -93,9 +81,9 @@ class OnnxReshape(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: disa
         target_dims = shape_tensor_to_sequence(adjusted_shape)
 
         if not target_dims:
-            return input_tensor.reshape(())
+            return torch.ops.aten.view.default(input_tensor, [])
 
-        return input_tensor.reshape(*target_dims)
+        return torch.ops.aten.view.default(input_tensor, list(target_dims))
 
     def forward(  # pylint: disable=missing-function-docstring
         self,
@@ -105,13 +93,6 @@ class OnnxReshape(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: disa
         def _forward() -> torch.Tensor:
             if self._static_shape is not None:
                 return self._reshape_with_static_shape(input_tensor)
-
-            if isinstance(
-                shape, FakeTensor
-            ):  # pragma: no cover - exercised under torch.export
-                raise NotImplementedError(
-                    "Dynamic Reshape shapes are not supported in fake tensor mode yet"
-                )
 
             return self._do_reshape(input_tensor, shape)
 
@@ -155,9 +136,9 @@ class OnnxReshape(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: disa
 
         resolved_dims = tuple(dimension for dimension in dims if dimension is not None)
         if not resolved_dims:
-            return input_tensor.reshape(())
+            return torch.ops.aten.view.default(input_tensor, [])
 
-        return input_tensor.reshape(*resolved_dims)
+        return torch.ops.aten.view.default(input_tensor, list(resolved_dims))
 
 
 @add_converter(operation_type="Reshape", version=5)

@@ -7,29 +7,22 @@ import argparse
 import contextlib
 import io
 import logging
+import math
 import shutil
 import traceback
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Dict, Iterator, List, Mapping, Sequence, Set, Tuple
+from typing import Dict, Iterator, List, Mapping, Sequence, Tuple
 
 import torch
 import yaml
 import onnx
-from onnx.onnx_ml_pb2 import ModelProto, TensorProto, ValueInfoProto
+from onnx.onnx_ml_pb2 import ModelProto, ValueInfoProto
 
 from onnx2torch.converter import convert
 from onnx2torch.utils.dtype import onnx_dtype_to_torch_dtype
-from onnx2torch.utils.safe_shape_inference import safe_shape_inference
-
-try:  # noqa: SIM105 - onnxsim may attempt to auto-install onnxruntime at import time
-    from onnxsim import simplify as _onnxsim_simplify
-except Exception as exc:  # noqa: BLE001 - propagate detailed failure later
-    _ONNXSIM_IMPORT_ERROR: Exception | None = exc
-    _onnxsim_simplify = None
-else:
-    _ONNXSIM_IMPORT_ERROR = None
+from onnx2torch.utils.shape_warmup import shape_warmup
 
 try:  # torch < 2.1 does not expose torch.export.export
     from torch.export import export as export_program
@@ -58,6 +51,10 @@ class InputConfig:
 class ExampleInputConfig:
     default_fill: str = "zeros"
     overrides: Dict[str, Dict[str, object]] = field(default_factory=dict)
+    scales: Dict[str, int] = field(default_factory=dict)
+    max_total_elements: int = 2_000_000
+    warmup_max_total_elements: int = 131_072
+    enable_warmup: bool = True
 
 
 @dataclass
@@ -68,7 +65,6 @@ class RunnerConfig:
     attach_onnx_mapping: bool = False
     device: str = "cpu"
     example_inputs: ExampleInputConfig = field(default_factory=ExampleInputConfig)
-    input_shapes: Dict[Path, Dict[str, Tuple[int, ...]]] = field(default_factory=dict)
 
 
 @dataclass
@@ -101,10 +97,6 @@ class ExportError(RuntimeError):
         super().__init__(f"{detail_msg} See {detail_path} for details.")
         self.source = source
         self.detail_path = detail_path
-
-
-class ShapePreparationError(RuntimeError):
-    """Raised when a model lacks required static input shape information."""
 
 
 def _prepare_run_directory() -> Path:
@@ -196,75 +188,57 @@ def _load_config(path: Path) -> RunnerConfig:
 
     example_cfg_raw = data.get("example_inputs", {})
     if isinstance(example_cfg_raw, dict):
-        default_fill = example_cfg_raw.get("default_fill", "zeros")
-        overrides = example_cfg_raw.get("overrides", example_cfg_raw.get("inputs", {}))
+        example_cfg_dict = example_cfg_raw
+        default_fill = example_cfg_dict.get("default_fill", "zeros")
+        overrides = example_cfg_dict.get(
+            "overrides", example_cfg_dict.get("inputs", {})
+        )
     elif example_cfg_raw in (None, ""):
+        example_cfg_dict = {}
         default_fill = "zeros"
         overrides = {}
     else:
         raise TypeError('The "example_inputs" section must be a mapping if provided.')
 
+    overrides_final: Dict[str, Dict[str, object]] = {}
+    for key, value in (overrides or {}).items():
+        if value is None:
+            overrides_final[str(key)] = {}
+        elif isinstance(value, dict):
+            overrides_final[str(key)] = dict(value)
+        else:
+            raise TypeError(
+                f"Override for {key!r} must be a mapping, got {type(value).__name__}."
+            )
+
+    scales_raw = example_cfg_dict.get("scales", {})
+    if not isinstance(scales_raw, dict):
+        raise TypeError(
+            'The "scales" entry under "example_inputs" must be a mapping if provided.'
+        )
+
     example_cfg = ExampleInputConfig(
         default_fill=str(default_fill).lower(),
-        overrides={key: dict(value) for key, value in (overrides or {}).items()},
+        overrides=overrides_final,
+        scales={str(k): int(v) for k, v in scales_raw.items()},
+        max_total_elements=int(
+            example_cfg_dict.get(
+                "max_total_elements", ExampleInputConfig.max_total_elements
+            )
+        ),
+        warmup_max_total_elements=int(
+            example_cfg_dict.get(
+                "warmup_max_total_elements",
+                ExampleInputConfig.warmup_max_total_elements,
+            )
+        ),
+        enable_warmup=bool(example_cfg_dict.get("enable_warmup", True)),
     )
 
     if example_cfg.default_fill not in SUPPORTED_FILLS:
         raise ValueError(
             f'"default_fill" must be one of {sorted(SUPPORTED_FILLS)}, got {example_cfg.default_fill!r}.',
         )
-
-    input_shapes_raw = data.get("input_shapes", {}) or {}
-    if not isinstance(input_shapes_raw, dict):
-        raise TypeError('The "input_shapes" section must be a mapping if provided.')
-
-    input_shape_overrides: Dict[Path, Dict[str, Tuple[int, ...]]] = {}
-    for model_key, shapes in input_shapes_raw.items():
-        if not isinstance(shapes, dict):
-            raise TypeError(
-                f'Each entry under "input_shapes" must be a mapping of input names to shapes; got {type(shapes).__name__!r} for {model_key!r}.',
-            )
-
-        resolved_model_path = Path(model_key).expanduser().resolve()
-        if resolved_model_path in input_shape_overrides:
-            raise ValueError(
-                f"Duplicate input_shapes entry for {resolved_model_path}.",
-            )
-
-        override: Dict[str, Tuple[int, ...]] = {}
-        for input_name, dims in shapes.items():
-            if isinstance(dims, dict):
-                if "shape" not in dims:
-                    raise TypeError(
-                        f'Input shape override for {input_name!r} in {model_key!r} must include a "shape" key.',
-                    )
-                dims = dims["shape"]
-
-            if not isinstance(dims, (list, tuple)):
-                raise TypeError(
-                    f"Input shape override for {input_name!r} in {model_key!r} must be a sequence of integers.",
-                )
-
-            try:
-                dims_tuple = tuple(int(dim) for dim in dims)
-            except (TypeError, ValueError) as exc:  # noqa: PERF203 - explicit error handling improves messaging
-                raise TypeError(
-                    f"Input shape override for {input_name!r} in {model_key!r} must contain only integers.",
-                ) from exc
-
-            if not dims_tuple:
-                raise ValueError(
-                    f"Input shape override for {input_name!r} in {model_key!r} cannot be empty.",
-                )
-
-            if any(dimension <= 0 for dimension in dims_tuple):
-                raise ValueError(
-                    f"Input shape override for {input_name!r} in {model_key!r} must contain positive dimensions.",
-                )
-
-            override[str(input_name)] = dims_tuple
-
-        input_shape_overrides[resolved_model_path] = override
 
     device = data.get("device", "cpu")
 
@@ -275,7 +249,6 @@ def _load_config(path: Path) -> RunnerConfig:
         attach_onnx_mapping=bool(conversion_cfg.get("attach_onnx_mapping", False)),
         device=str(device),
         example_inputs=example_cfg,
-        input_shapes=input_shape_overrides,
     )
 
 
@@ -340,229 +313,109 @@ def _dim_sizes(value_info: ValueInfoProto) -> List[int]:
     dims: List[int] = []
     for dim in value_info.type.tensor_type.shape.dim:
         if dim.HasField("dim_value") and dim.dim_value > 0:
-            dims.append(dim.dim_value)
+            dims.append(int(dim.dim_value))
         else:
             dims.append(1)
     return dims
 
 
-def _input_names_missing_static_shapes(model: ModelProto) -> Set[str]:
-    initializer_names = {initializer.name for initializer in model.graph.initializer}
-    missing: Set[str] = set()
+def _apply_dimension_scales(
+    shape: List[int],
+    labels: Sequence[str] | None,
+    scales: Mapping[str, int],
+    input_name: str,
+) -> List[int]:
+    if not labels:
+        return shape
 
-    for value_info in model.graph.input:
-        if value_info.name in initializer_names:
+    adjusted = list(shape)
+    for index, label in enumerate(labels):
+        if index >= len(adjusted) or label is None:
             continue
-
-        tensor_type = value_info.type.tensor_type
-        if not tensor_type.HasField("shape"):
-            missing.add(value_info.name)
+        key = str(label)
+        if key not in scales:
             continue
-
-        dims = tensor_type.shape.dim
-        if not dims:
+        clamp_value = int(scales[key])
+        if clamp_value <= 0:
             continue
-
-        for dim in dims:
-            if not dim.HasField("dim_value") or dim.dim_value <= 0:
-                missing.add(value_info.name)
-                break
-
-    return missing
-
-
-def _lookup_input_shape_overrides(
-    config: RunnerConfig, model_path: Path
-) -> Dict[str, Tuple[int, ...]]:
-    resolved_path = model_path.expanduser().resolve()
-    return config.input_shapes.get(resolved_path, {})
-
-
-def _clone_model(model: ModelProto) -> ModelProto:
-    clone = ModelProto()
-    clone.CopyFrom(model)
-    return clone
-
-
-def _apply_input_shape_overrides_without_onnxsim(
-    model: ModelProto,
-    overrides: Mapping[str, Sequence[int]],
-    source: Path,
-) -> ModelProto:
-    patched_model = _clone_model(model)
-    inputs_by_name = {
-        value_info.name: value_info for value_info in patched_model.graph.input
-    }
-
-    unknown_overrides = set(overrides).difference(inputs_by_name)
-    if unknown_overrides:
-        raise ShapePreparationError(
-            "Shape overrides provided for unknown inputs {inputs} in model {source}.".format(
-                inputs=", ".join(sorted(unknown_overrides)), source=source
-            )
-        )
-
-    for name, dims in overrides.items():
-        value_info = inputs_by_name[name]
-        if value_info.type.WhichOneof("value") != "tensor_type":
-            raise ShapePreparationError(
-                f"Input {name} in model {source} is not a tensor; cannot override its shape."
-            )
-
-        tensor_type = value_info.type.tensor_type
-        shape = tensor_type.shape
-        shape.dim.clear()
-        for dimension in dims:
-            dim_proto = shape.dim.add()
-            dim_proto.dim_value = int(dimension)
-
-    return patched_model
-
-
-def _restore_initializer_data_from_source(
-    target: ModelProto,
-    initializer_store: Mapping[str, TensorProto],
-    model_path: Path,
-) -> None:
-    missing_sources = []
-
-    for initializer in target.graph.initializer:
-        if initializer.raw_data:
-            continue
-
-        original = initializer_store.get(initializer.name)
-        if original is None:
-            missing_sources.append(initializer.name)
-            continue
-
-        initializer.CopyFrom(original)
-
-    if missing_sources:
-        raise ShapePreparationError(
-            "Unable to restore tensor data for inputs {inputs} in model {source}.".format(
-                inputs=", ".join(sorted(missing_sources)), source=model_path
-            )
-        )
-
-
-def _prepare_model_with_shapes(task: ModelTask, config: RunnerConfig) -> ModelProto:
-    try:
-        raw_model = onnx.load(str(task.source))
-    except Exception as exc:  # noqa: BLE001 - propagate context to user
-        raise ShapePreparationError(
-            f"Failed to load ONNX model {task.source}: {exc}"
-        ) from exc
-
-    initializer_store: Dict[str, TensorProto] = {}
-    for initializer in raw_model.graph.initializer:
-        clone = TensorProto()
-        clone.CopyFrom(initializer)
-        initializer_store[initializer.name] = clone
-
-    try:
-        inferred_model = safe_shape_inference(raw_model)
-    except Exception as exc:  # noqa: BLE001 - inference can fail when shapes are missing
-        LOGGER.debug("Initial shape inference failed for %s: %s", task.source, exc)
-        inferred_model = raw_model
-
-    missing_inputs = _input_names_missing_static_shapes(inferred_model)
-    if not missing_inputs:
-        LOGGER.debug("Model %s already has static input shapes.", task.source)
-        return inferred_model
-
-    overrides = _lookup_input_shape_overrides(config, task.source)
-    if not overrides:
-        formatted = ", ".join(sorted(missing_inputs)) or "unknown inputs"
-        raise ShapePreparationError(
-            "Model {source} has dynamic or missing shapes for inputs: {inputs}. "
-            "Provide static dimensions under the config's `input_shapes` section.".format(
-                source=task.source, inputs=formatted
-            )
-        )
-
-    missing_overrides = missing_inputs.difference(overrides.keys())
-    if missing_overrides:
-        raise ShapePreparationError(
-            "Missing shape overrides for inputs {inputs} in model {source}. "
-            "Update the `input_shapes` section to include them.".format(
-                inputs=", ".join(sorted(missing_overrides)), source=task.source
-            )
-        )
-
-    override_payload = {
-        name: [int(dimension) for dimension in dimensions]
-        for name, dimensions in overrides.items()
-    }
-
-    LOGGER.debug(
-        "Applying input shape overrides for %s: %s",
-        task.source,
-        {name: tuple(dims) for name, dims in override_payload.items()},
-    )
-
-    def apply_overrides_manually() -> ModelProto:
-        try:
-            patched = _apply_input_shape_overrides_without_onnxsim(
-                raw_model, override_payload, task.source
-            )
-        except ShapePreparationError:
-            raise
-        except Exception as manual_exc:  # noqa: BLE001 - propagate context to user
-            raise ShapePreparationError(
-                f"Failed to apply shape overrides for {task.source}: {manual_exc}"
-            ) from manual_exc
-
-        try:
-            inferred = safe_shape_inference(patched)
-        except Exception as inference_exc:  # noqa: BLE001 - inference can still fail
-            raise ShapePreparationError(
-                "Shape inference failed after applying overrides for {source}: {error}".format(
-                    source=task.source, error=inference_exc
-                )
-            ) from inference_exc
-
-        if any(not initializer.raw_data for initializer in inferred.graph.initializer):
-            _restore_initializer_data_from_source(
-                inferred, initializer_store, task.source
-            )
-
-        return inferred
-
-    if _onnxsim_simplify is None:
-        LOGGER.info(
-            "onnxsim is unavailable; applying shape overrides directly for %s.",
-            task.source,
-        )
-        return apply_overrides_manually()
-
-    try:
-        simplified_model, ok = _onnxsim_simplify(
-            model=str(task.source),
-            overwrite_input_shapes=override_payload,
-        )
-    except Exception as exc:  # noqa: BLE001 - onnxsim raises various exception types
-        message = str(exc)
-        if "ir_version" in message.lower():
+        if adjusted[index] > clamp_value:
             LOGGER.warning(
-                "onnxsim could not apply shape overrides for %s due to IR version issues: %s. "
-                "Falling back to a manual override path.",
-                task.source,
-                message,
+                "Clamping dimension %s[%s] from %d to %d based on scale hints.",
+                input_name,
+                key,
+                adjusted[index],
+                clamp_value,
             )
-            return apply_overrides_manually()
+            adjusted[index] = clamp_value
+    return adjusted
 
-        raise ShapePreparationError(
-            f"onnxsim.simplify failed for {task.source}: {exc}"
-        ) from exc
 
-    if not ok:
+def _enforce_element_cap(
+    shape: List[int],
+    cap: int,
+    *,
+    input_name: str,
+    reason: str,
+) -> List[int]:
+    if cap <= 0 or not shape:
+        return shape
+
+    original = list(shape)
+    total_requested = math.prod(original) or 1
+    if total_requested <= cap:
+        return shape
+
+    new_shape = list(original)
+    changed = False
+
+    for index in reversed(range(len(new_shape))):
+        current_total = math.prod(new_shape) or 1
+        if current_total <= cap:
+            break
+        other_prod = math.prod(new_shape[:index] + new_shape[index + 1 :]) or 1
+        max_dim = max(1, cap // other_prod)
+        if max_dim < new_shape[index]:
+            new_shape[index] = max_dim
+            changed = True
+
+    current_total = math.prod(new_shape) or 1
+    if current_total > cap:
+        new_shape = [1] * len(new_shape)
+        current_total = 1
+        changed = True
+
+    if changed:
         LOGGER.warning(
-            "onnxsim.simplify reported invalid output for %s; retrying with manual shape overrides.",
-            task.source,
+            "Input %s requested %d elements; clamped to %d elements (%s cap=%d).",
+            input_name,
+            total_requested,
+            current_total,
+            reason,
+            cap,
         )
-        return apply_overrides_manually()
+        LOGGER.debug("Adjusted %s shape from %s to %s", input_name, original, new_shape)
 
-    return safe_shape_inference(simplified_model)
+    return new_shape
+
+
+def _parse_scale_overrides(entries: Sequence[str]) -> Dict[str, int]:
+    overrides: Dict[str, int] = {}
+    for entry in entries:
+        if "=" not in entry:
+            raise ValueError(
+                f"Scale override {entry!r} must be in the form <name>=<value>."
+            )
+        key, value = entry.split("=", 1)
+        key = key.strip()
+        if not key:
+            raise ValueError(f"Scale override {entry!r} is missing a name.")
+        try:
+            overrides[key] = int(value)
+        except ValueError as exc:  # noqa: PERF203 - provide clearer message
+            raise ValueError(
+                f"Scale override {entry!r} must have an integer value."
+            ) from exc
+    return overrides
 
 
 def _resolve_dtype(
@@ -608,68 +461,123 @@ def _dtype_from_string(value: str) -> torch.dtype:
     return aliases[key]
 
 
-def _create_example_tensor(
+def _materialise_example_tensor(
+    shape: Sequence[int],
+    *,
+    fill: str,
+    dtype: torch.dtype,
+    device: str,
+) -> torch.Tensor:
+    shape_tuple: Tuple[int, ...] = tuple(max(1, int(dim)) for dim in shape)
+    if fill == "zeros":
+        return torch.zeros(shape_tuple, dtype=dtype, device=device)
+    if fill == "ones":
+        return torch.ones(shape_tuple, dtype=dtype, device=device)
+    if fill == "random":
+        if dtype.is_floating_point or dtype.is_complex:
+            return torch.randn(shape_tuple, dtype=dtype, device=device)
+        if dtype == torch.bool:
+            return torch.randint(0, 2, shape_tuple, dtype=torch.bool, device=device)
+        return torch.randint(0, 10, shape_tuple, dtype=dtype, device=device)
+
+    raise ValueError(f"Unsupported fill strategy {fill!r}.")
+
+
+def _create_example_tensors(
     name: str,
     value_info: ValueInfoProto,
     override: Dict[str, object],
-    default_fill: str,
+    example_cfg: ExampleInputConfig,
     device: str,
-) -> torch.Tensor:
+) -> Tuple[torch.Tensor, torch.Tensor]:
     if "shape" in override:
-        shape = list(int(size) for size in override["shape"])
+        runtime_shape = [int(size) for size in override["shape"]]
     else:
-        shape = _dim_sizes(value_info)
+        runtime_shape = _dim_sizes(value_info)
         if override.get("ensure_min_dim"):
             min_dim = int(override["ensure_min_dim"])
-            shape = [max(dim, min_dim) for dim in shape]
+            runtime_shape = [max(dim, min_dim) for dim in runtime_shape]
 
-    if not shape:
-        shape = []
+    warmup_shape_override = override.get("warmup_shape")
+    if warmup_shape_override is not None:
+        warmup_shape = [int(size) for size in warmup_shape_override]
+    else:
+        warmup_shape = list(runtime_shape)
+
+    labels_raw = override.get("dim_labels")
+    labels: List[str | None] | None = None
+    if labels_raw is not None:
+        labels = []
+        for entry in labels_raw:
+            labels.append(None if entry is None else str(entry))
+
+    runtime_shape = [max(1, int(dim)) for dim in runtime_shape]
+    warmup_shape = [max(1, int(dim)) for dim in warmup_shape]
+
+    runtime_shape = _apply_dimension_scales(
+        runtime_shape, labels, example_cfg.scales, name
+    )
+    warmup_shape = _apply_dimension_scales(
+        warmup_shape, labels, example_cfg.scales, f"{name} (warmup)"
+    )
+
+    runtime_cap = int(
+        override.get("max_total_elements", example_cfg.max_total_elements)
+    )
+    warmup_cap = int(
+        override.get("warmup_max_total_elements", example_cfg.warmup_max_total_elements)
+    )
+
+    runtime_shape = _enforce_element_cap(
+        runtime_shape, runtime_cap, input_name=name, reason="runtime"
+    )
+    warmup_shape = _enforce_element_cap(
+        warmup_shape, warmup_cap, input_name=name, reason="warmup"
+    )
 
     torch_dtype = _resolve_dtype(name, value_info.type.tensor_type.elem_type, override)
 
-    fill = str(override.get("fill", default_fill)).lower()
+    fill = str(override.get("fill", example_cfg.default_fill)).lower()
     if fill not in SUPPORTED_FILLS:
         raise ValueError(f"Unsupported fill strategy {fill!r} for input {name}.")
 
-    shape_tuple: Tuple[int, ...] = tuple(int(max(1, dim)) for dim in shape)
+    runtime_tensor = _materialise_example_tensor(
+        runtime_shape, fill=fill, dtype=torch_dtype, device=device
+    )
+    warmup_tensor = _materialise_example_tensor(
+        warmup_shape, fill=fill, dtype=torch_dtype, device=device
+    )
 
-    if fill == "zeros":
-        return torch.zeros(shape_tuple, dtype=torch_dtype, device=device)
-    if fill == "ones":
-        return torch.ones(shape_tuple, dtype=torch_dtype, device=device)
-
-    # fill == 'random'
-    if torch_dtype.is_floating_point or torch_dtype.is_complex:
-        return torch.randn(shape_tuple, dtype=torch_dtype, device=device)
-    if torch_dtype == torch.bool:
-        return torch.randint(0, 2, shape_tuple, dtype=torch.bool, device=device)
-    # Integers default to uniform range [0, 10).
-    return torch.randint(0, 10, shape_tuple, dtype=torch_dtype, device=device)
+    return runtime_tensor, warmup_tensor
 
 
-def _build_example_args(
+def _build_example_and_warmup_args(
     model: ModelProto, config: RunnerConfig
-) -> Tuple[torch.Tensor, ...]:
+) -> Tuple[Tuple[torch.Tensor, ...], Tuple[torch.Tensor, ...]]:
     initializer_names = {initializer.name for initializer in model.graph.initializer}
     overrides = config.example_inputs.overrides
-    tensors: List[torch.Tensor] = []
+    runtime_tensors: List[torch.Tensor] = []
+    warmup_tensors: List[torch.Tensor] = []
 
     for value_info in model.graph.input:
         if value_info.name in initializer_names:
             continue
 
         override = overrides.get(value_info.name, {})
-        tensor = _create_example_tensor(
+        runtime_tensor, warmup_tensor = _create_example_tensors(
             name=value_info.name,
             value_info=value_info,
             override=override,
-            default_fill=config.example_inputs.default_fill,
+            example_cfg=config.example_inputs,
             device=config.device,
         )
-        tensors.append(tensor)
+        runtime_tensors.append(runtime_tensor)
+        warmup_tensors.append(warmup_tensor)
 
-    return tuple(tensors)
+    if not config.example_inputs.enable_warmup:
+        return tuple(runtime_tensors), tuple()
+
+    return tuple(runtime_tensors), tuple(warmup_tensors)
 
 
 def _write_failure_details(
@@ -705,10 +613,9 @@ def _export_model(
     task: ModelTask, config: RunnerConfig, run_context: RunContext
 ) -> None:
     LOGGER.info("Converting %s", task.source)
-
     try:
-        model_with_shapes = _prepare_model_with_shapes(task, config)
-    except ShapePreparationError as error:
+        model = onnx.load(str(task.source))
+    except Exception as error:  # noqa: BLE001 - propagate context to user
         failure_path = _write_failure_details(
             task,
             run_context,
@@ -716,41 +623,85 @@ def _export_model(
             captured_output="",
         )
         LOGGER.error(
-            "Failed to prepare shapes for %s. Details saved to %s",
+            "Failed to load %s. Details saved to %s",
             task.source,
             failure_path,
         )
-        if run_context.show_full_trace:
-            raise
         raise ExportError(
             source=task.source,
             detail_path=failure_path,
-            message=str(error),
+            message=f"Failed to load {task.source}",
         ) from None
 
     with torch.inference_mode():
-        module = convert(
-            model_with_shapes,
-            save_input_names=config.save_input_names,
-            attach_onnx_mapping=config.attach_onnx_mapping,
-        )
+        try:
+            module = convert(
+                model,
+                save_input_names=config.save_input_names,
+                attach_onnx_mapping=config.attach_onnx_mapping,
+            )
+        except Exception as error:  # noqa: BLE001 - capture conversion failures
+            failure_path = _write_failure_details(
+                task,
+                run_context,
+                error,
+                captured_output="",
+            )
+            LOGGER.error(
+                "Failed to convert %s. Details saved to %s",
+                task.source,
+                failure_path,
+            )
+            raise ExportError(
+                source=task.source,
+                detail_path=failure_path,
+                message=f"Failed to convert {task.source}",
+            ) from None
+
         module.eval()
         module.to(config.device)
 
-        example_args = _build_example_args(model_with_shapes, config)
+        runtime_args, warmup_args = _build_example_and_warmup_args(model, config)
+
         LOGGER.debug(
-            "Example args for %s: %s",
+            "Runtime args for %s: %s",
             task.source,
-            [tuple(t.shape) for t in example_args],
+            [tuple(t.shape) for t in runtime_args],
         )
+        LOGGER.debug(
+            "Warmup args for %s: %s",
+            task.source,
+            [tuple(t.shape) for t in warmup_args],
+        )
+
+        if warmup_args:
+            try:
+                with shape_warmup():
+                    module(*warmup_args)
+            except Exception as error:  # noqa: BLE001 - continue to wrap with details
+                failure_path = _write_failure_details(
+                    task,
+                    run_context,
+                    error,
+                    captured_output="",
+                )
+                LOGGER.error(
+                    "Warm-up execution failed for %s. Details saved to %s",
+                    task.source,
+                    failure_path,
+                )
+                raise ExportError(
+                    source=task.source,
+                    detail_path=failure_path,
+                    message=f"Warm-up execution failed for {task.source}",
+                ) from None
 
         captured = io.StringIO()
         try:
-            with (
-                contextlib.redirect_stdout(captured),
-                contextlib.redirect_stderr(captured),
+            with contextlib.redirect_stdout(captured), contextlib.redirect_stderr(
+                captured
             ):
-                exported = export_program(module, example_args)
+                exported = export_program(module, runtime_args)
         except Exception as error:  # noqa: BLE001 - want to catch and wrap
             failure_path = _write_failure_details(
                 task,
@@ -763,8 +714,6 @@ def _export_model(
                 task.source,
                 failure_path,
             )
-            if run_context.show_full_trace:
-                raise
             raise ExportError(
                 source=task.source,
                 detail_path=failure_path,
@@ -786,6 +735,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "-v", "--verbose", action="count", default=0, help="Increase logging verbosity."
     )
+    parser.add_argument(
+        "--scale",
+        action="append",
+        default=[],
+        help="Override dimension scale hints (name=value). Can be repeated.",
+    )
 
     args = parser.parse_args(argv)
 
@@ -796,6 +751,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     LOGGER.info("Run logs directory: %s", run_context.directory)
 
     config = _load_config(cfg_path)
+    if args.scale:
+        scale_overrides = _parse_scale_overrides(args.scale)
+        if scale_overrides:
+            config.example_inputs.scales.update(scale_overrides)
+            LOGGER.info("Applied scale overrides: %s", scale_overrides)
     _persist_run_config(cfg_path, run_context)
     tasks = _collect_tasks(config)
 

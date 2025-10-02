@@ -1,19 +1,13 @@
-"""Helpers for working with ONNX shape tensors."""
+"""Helpers for working with ONNX shape tensors and symbolic dimensions."""
 
 from __future__ import annotations
 
+from typing import Sequence
 from typing import Tuple
 from typing import Union
 
+import numpy as np
 import torch
-
-try:  # pragma: no cover - optional dependency in older torch releases
-    from torch._dynamo import is_compiling as _dynamo_is_compiling
-except ImportError:  # pragma: no cover - dynamo unavailable
-
-    def _dynamo_is_compiling() -> bool:
-        return False
-
 
 try:  # pragma: no cover - FakeTensor may not exist on older torch
     from torch._subclasses.fake_tensor import FakeTensor
@@ -25,31 +19,47 @@ try:  # pragma: no cover - SymInt introduced in newer torch releases
 except ImportError:  # pragma: no cover - fall back when SymInt is missing
     SymInt = int  # type: ignore[assignment]
 
-ShapeDimension = Union[int, SymInt, torch.Tensor]
+ShapeDimension = Union[int, SymInt]
+
+
+def _flatten_tensor(values: torch.Tensor) -> torch.Tensor:
+    if values.ndim == 0:
+        return values.reshape(1)
+    return values.reshape(-1)
+
+
+def _tensor_to_symint_tuple(tensor: torch.Tensor) -> Tuple[ShapeDimension, ...]:
+    canonical = _flatten_tensor(tensor.to(dtype=torch.int64))
+
+    try:
+        values = canonical.tolist()
+    except Exception as error:  # pragma: no cover - provide actionable failure
+        raise NotImplementedError(
+            "Failed to materialise symbolic shape values; ensure a ShapeEnv is available."
+        ) from error
+
+    return tuple(values)
 
 
 def shape_tensor_to_sequence(shape: torch.Tensor) -> Tuple[ShapeDimension, ...]:
     """Return a tuple of shape dimensions safe for eager and fake tensor modes."""
 
-    shape_tensor = shape.to(dtype=torch.int64)
-
-    if shape_tensor.numel() == 0:
+    if shape.numel() == 0:
         return ()
 
-    flattened = shape_tensor.reshape(-1)
+    return _tensor_to_symint_tuple(shape)
 
-    if isinstance(shape, FakeTensor):
-        try:
-            values = flattened.tolist()
-        except (
-            Exception
-        ) as error:  # pragma: no cover - defensive against missing shape env
-            raise NotImplementedError(
-                "FakeTensor shapes without a shape environment are not supported"
-            ) from error
-        return tuple(values)
 
-    if _dynamo_is_compiling():
-        return tuple(flattened.unbind(0))
+SequenceInput = Union[torch.Tensor, np.ndarray, Sequence[Union[int, SymInt]]]
 
-    return tuple(int(dimension) for dimension in flattened.tolist())
+
+def sequence_to_symint_tuple(values: SequenceInput) -> Tuple[ShapeDimension, ...]:
+    """Coerce ONNX-provided sequences to a tuple of SymInt-friendly scalars."""
+
+    if isinstance(values, torch.Tensor):
+        return _tensor_to_symint_tuple(values)
+
+    if isinstance(values, np.ndarray):
+        return tuple(int(value) for value in values.reshape(-1).tolist())
+
+    return tuple(values)

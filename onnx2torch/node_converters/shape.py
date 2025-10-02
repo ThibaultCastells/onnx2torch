@@ -45,9 +45,34 @@ class OnnxShape(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: disabl
 
     def forward(self, input_tensor: torch.Tensor) -> torch.Tensor:  # pylint: disable=missing-function-docstring
         def _forward():
-            return torch.tensor(
-                input_tensor.shape[self._start : self._end],
-                device=input_tensor.device,
+            rank = input_tensor.dim()
+            if rank == 0:
+                shape_tensor = torch.zeros(
+                    (0,), dtype=torch.int64, device=input_tensor.device
+                )
+            else:
+                components = [
+                    torch.ops.aten.scalar_tensor.default(
+                        torch.ops.aten.sym_size.int(input_tensor, index),
+                        dtype=torch.int64,
+                        device=input_tensor.device,
+                    )
+                    for index in range(rank)
+                ]
+                shape_tensor = torch.ops.aten.stack.default(components, 0)
+
+            if self._start == 0 and self._end is None:
+                return shape_tensor
+
+            start_index = self._start if self._start >= 0 else self._start + rank
+            end_value = rank if self._end is None else self._end
+            end_index = end_value if end_value >= 0 else end_value + rank
+
+            start_index = max(0, min(start_index, rank))
+            end_index = max(start_index, min(end_index, rank))
+
+            return torch.ops.aten.slice.Tensor(
+                shape_tensor, 0, start_index, end_index, 1
             )
 
         if torch.onnx.is_in_onnx_export():

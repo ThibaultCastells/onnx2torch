@@ -4,6 +4,7 @@ from operator import getitem
 from pathlib import Path
 from typing import Union
 
+import onnx
 import torch
 from onnx.onnx_ml_pb2 import ModelProto
 from torch import fx
@@ -13,7 +14,6 @@ from onnx2torch.node_converters import get_converter
 from onnx2torch.onnx_graph import OnnxGraph
 from onnx2torch.onnx_graph import ValueType
 from onnx2torch.utils.error_context import attach_onnx_context
-from onnx2torch.utils.safe_shape_inference import safe_shape_inference
 
 
 def _remove_initializers_from_input(model: ModelProto) -> ModelProto:
@@ -70,7 +70,11 @@ def convert(  # pylint: disable=too-many-locals, too-many-branches, too-many-sta
 
     """
 
-    onnx_model = safe_shape_inference(onnx_model_or_path)
+    if isinstance(onnx_model_or_path, ModelProto):
+        onnx_model = ModelProto()
+        onnx_model.CopyFrom(onnx_model_or_path)
+    else:
+        onnx_model = onnx.load(str(onnx_model_or_path))
 
     if onnx_model.ir_version < 3:
         raise NotImplementedError(
