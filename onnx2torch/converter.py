@@ -41,6 +41,7 @@ def convert(  # pylint: disable=too-many-locals, too-many-branches, too-many-sta
     onnx_model_or_path: Union[str, Path, ModelProto],
     save_input_names: bool = False,
     attach_onnx_mapping: bool = False,
+    progress: Union[bool, str] = False,
 ) -> fx.GraphModule:
     """Convert model from onnx to PyTorch.
 
@@ -62,6 +63,10 @@ def convert(  # pylint: disable=too-many-locals, too-many-branches, too-many-sta
         False by default.
     attach_onnx_mapping : bool
         Whether to attach info about mapping to original onnx tensors names.
+    progress : Union[bool, str]
+        Enable tqdm progress reporting when converting ONNX nodes. When set to True a
+        progress bar is displayed with a generic description; when set to a string,
+        the value is used as the bar description. Disabled by default.
 
     Returns
     -------
@@ -111,80 +116,112 @@ def convert(  # pylint: disable=too-many-locals, too-many-branches, too-many-sta
 
     # create intermediate nodes
     # IMPORTANT: nodes already topologically sorted
-    for name, onnx_node in onnx_graph.nodes.items():
-        version = opset_import[onnx_node.domain]
-        converter = get_converter(
-            domain=onnx_node.domain,
-            operation_type=onnx_node.operation_type,
-            version=version,
-        )
 
-        torch_module, onnx_mapping = converter(onnx_node, onnx_graph)
-        attach_onnx_context(torch_module, onnx_node, onnx_mapping)
-        if attach_onnx_mapping:
-            setattr(torch_module, "onnx_mapping", onnx_mapping)
+    progress_bar = None
+    progress_enabled = isinstance(progress, str) or bool(progress)
+    if progress_enabled:
+        total_nodes = len(onnx_graph.nodes)
+        if total_nodes > 0:
+            try:
+                from tqdm.auto import tqdm
+            except ImportError as exc:  # pragma: no cover - dependency guard
+                raise RuntimeError(
+                    "Progress reporting requested but tqdm is not installed."
+                ) from exc
 
-        torch_modules.add_module(name, torch_module)
-
-        args = []
-        for value_name in onnx_mapping.inputs:
-            value_type = onnx_graph.value_type(value_name)
-            if value_type == ValueType.GRAPH_INPUT:
-                args.append(torch_nodes[value_name])
-
-            elif value_type == ValueType.NODE_OUTPUT:
-                onnx_input_node, _ = onnx_graph.value_as_node_output(value_name)
-                torch_input_node = torch_nodes[onnx_input_node.unique_name]
-
-                # Get only one needed output of torch_input_node by index
-                if len(onnx_input_node.output_values) > 1:
-                    index = onnx_input_node.output_values.index(value_name)
-                    torch_input_node = torch_graph.call_function(
-                        getitem, args=(torch_input_node, index)
-                    )
-                    torch_nodes[name + "_split_output"] = torch_input_node
-                args.append(torch_input_node)
-
-            elif value_type == ValueType.GRAPH_INITIALIZER:
-                # The name of pytorch buffer must not contain '.'(dot)
-                len_torch_initializers = sum(1 for _ in torch_initializers.buffers())
-                torch_buffer_name = f"onnx_initializer_{len_torch_initializers}"
-                if value_name not in torch_nodes:
-                    torch_initializers.add_initializer(
-                        torch_buffer_name,
-                        onnx_graph.initializers[value_name].to_torch(),
-                    )
-                    torch_nodes[torch_buffer_name] = torch_graph.get_attr(
-                        f"initializers.{torch_buffer_name}"
-                    )
-                args.append(torch_nodes[torch_buffer_name])
-
-            elif value_type == ValueType.EMPTY:
-                args.append(None)
-
-            else:
-                raise RuntimeError(f"Got unexpected input value type ({value_type})")
-
-        # Collect kwargs if there are some skipped args
-        kwargs = {}
-        if None in args:
-            first_skipped_arg = args.index(None)
-            forward_args = tuple(
-                inspect.signature(torch_module.forward).parameters.keys()
-            )
-            forward_args = forward_args[first_skipped_arg : len(args)]
-            args, kwargs_values = args[:first_skipped_arg], args[first_skipped_arg:]
-            kwargs.update(
-                {
-                    name: value
-                    for name, value in zip(forward_args, kwargs_values)
-                    if value is not None
-                }
+            description = progress if isinstance(progress, str) else "Converting nodes"
+            progress_bar = tqdm(
+                total=total_nodes,
+                desc=description,
+                unit="node",
+                leave=False,
             )
 
-        torch_nodes[name] = torch_graph.call_module(
-            module_name=name, args=tuple(args), kwargs=kwargs
-        )
+    try:
+        for name, onnx_node in onnx_graph.nodes.items():
+            version = opset_import[onnx_node.domain]
+            converter = get_converter(
+                domain=onnx_node.domain,
+                operation_type=onnx_node.operation_type,
+                version=version,
+            )
+
+            torch_module, onnx_mapping = converter(onnx_node, onnx_graph)
+            attach_onnx_context(torch_module, onnx_node, onnx_mapping)
+            if attach_onnx_mapping:
+                setattr(torch_module, "onnx_mapping", onnx_mapping)
+
+            torch_modules.add_module(name, torch_module)
+
+            args = []
+            for value_name in onnx_mapping.inputs:
+                value_type = onnx_graph.value_type(value_name)
+                if value_type == ValueType.GRAPH_INPUT:
+                    args.append(torch_nodes[value_name])
+
+                elif value_type == ValueType.NODE_OUTPUT:
+                    onnx_input_node, _ = onnx_graph.value_as_node_output(value_name)
+                    torch_input_node = torch_nodes[onnx_input_node.unique_name]
+
+                    # Get only one needed output of torch_input_node by index
+                    if len(onnx_input_node.output_values) > 1:
+                        index = onnx_input_node.output_values.index(value_name)
+                        torch_input_node = torch_graph.call_function(
+                            getitem, args=(torch_input_node, index)
+                        )
+                        torch_nodes[name + "_split_output"] = torch_input_node
+                    args.append(torch_input_node)
+
+                elif value_type == ValueType.GRAPH_INITIALIZER:
+                    # The name of pytorch buffer must not contain '.'(dot)
+                    len_torch_initializers = sum(
+                        1 for _ in torch_initializers.buffers()
+                    )
+                    torch_buffer_name = f"onnx_initializer_{len_torch_initializers}"
+                    if value_name not in torch_nodes:
+                        torch_initializers.add_initializer(
+                            torch_buffer_name,
+                            onnx_graph.initializers[value_name].to_torch(),
+                        )
+                        torch_nodes[torch_buffer_name] = torch_graph.get_attr(
+                            f"initializers.{torch_buffer_name}"
+                        )
+                    args.append(torch_nodes[torch_buffer_name])
+
+                elif value_type == ValueType.EMPTY:
+                    args.append(None)
+
+                else:
+                    raise RuntimeError(
+                        f"Got unexpected input value type ({value_type})"
+                    )
+
+            # Collect kwargs if there are some skipped args
+            kwargs = {}
+            if None in args:
+                first_skipped_arg = args.index(None)
+                forward_args = tuple(
+                    inspect.signature(torch_module.forward).parameters.keys()
+                )
+                forward_args = forward_args[first_skipped_arg : len(args)]
+                args, kwargs_values = args[:first_skipped_arg], args[first_skipped_arg:]
+                kwargs.update(
+                    {
+                        name: value
+                        for name, value in zip(forward_args, kwargs_values)
+                        if value is not None
+                    }
+                )
+
+            torch_nodes[name] = torch_graph.call_module(
+                module_name=name, args=tuple(args), kwargs=kwargs
+            )
+
+            if progress_bar is not None:
+                progress_bar.update()
+    finally:
+        if progress_bar is not None:
+            progress_bar.close()
 
     # Create output nodes
     onnx_output_nodes = [

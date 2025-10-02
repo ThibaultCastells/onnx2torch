@@ -1,7 +1,7 @@
 # Example configuration for run.py
 # This configuration converts every .onnx model under data/onnx/ recursively.
 inputs:
-  path: data/onnx
+  path: data/onnx/Qwen__Qwen3-0.6B
   recursive: true
   pattern: '*.onnx'
 
@@ -11,24 +11,5 @@ output_dir: data/executorch
 conversion:
   save_input_names: false
   attach_onnx_mapping: false
-
-# Optional sample input overrides. The defaults produce zero tensors that match
-# the shapes embedded in the ONNX model. Uncomment to customize an input.
-example_inputs:
-  default_fill: zeros
-  overrides:
-    input_ids:
-      dim_labels: [batch, sequence_length]
-      warmup_shape: [1, 1024]
-    attention_mask:
-      dim_labels: [batch, sequence_length]
-      warmup_shape: [1, 1024]
-    position_ids:
-      dim_labels: [batch, sequence_length]
-      warmup_shape: [1, 1024]
-  scales:
-    sequence_length: 4096
-  max_total_elements: 4194304
-  warmup_max_total_elements: 262144
 
 device: cpu

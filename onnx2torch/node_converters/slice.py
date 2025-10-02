@@ -29,6 +29,7 @@ from onnx2torch.utils.custom_export_to_onnx import DefaultExportToOnnx
 from onnx2torch.utils.custom_export_to_onnx import OnnxToTorchModuleWithCustomExport
 from onnx2torch.utils.shape_utils import ShapeDimension
 from onnx2torch.utils.shape_utils import sequence_to_symint_tuple
+from onnx2torch.utils.shape_warmup import is_shape_warmup_active
 
 
 def _is_symbolic(value: ShapeDimension) -> bool:
@@ -65,7 +66,10 @@ def _materialise_static_slice(
 
     for start, end, axis, step in zip(starts, ends, axes, steps):
         if step == 0:
-            raise ValueError("Slice step cannot be zero.")
+            if is_shape_warmup_active():
+                step = 1
+            else:
+                raise ValueError("Slice step cannot be zero.")
         if step < 0:
             flip_dims.append(axis)
             start, end, step = -start - 1, -end - 1, -step
@@ -201,7 +205,19 @@ class OnnxSlice(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: disabl
     ) -> Tuple[int, ...]:
         if axes is not None:
             axes_sequence = sequence_to_symint_tuple(axes)
-            return _coerce_int_tuple(axes_sequence, description="axes")
+            if _all_concrete(axes_sequence):
+                return _coerce_int_tuple(axes_sequence, description="axes")
+
+            if self._constant_axes is not None:
+                if len(self._constant_axes) != length:
+                    raise ValueError(
+                        "Slice constant axes length does not match starts length."
+                    )
+                return self._constant_axes
+
+            raise NotImplementedError(
+                "Slice axes requires concrete integers; received a symbolic value."
+            )
 
         if self._constant_axes is not None:
             return self._constant_axes

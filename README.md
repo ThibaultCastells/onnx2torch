@@ -60,29 +60,13 @@ print(np.allclose(outputs_ort, out_torch.detach().numpy(), atol=1.0e-7))
 
 ### CLI Conversion
 
-The `run.py` helper script converts one or more ONNX models to `torch.export` bundles using a YAML configuration:
+The `run.py` helper script converts one or more ONNX models to `torch.export` bundles using a YAML configuration. When embedding the library directly, pass `progress=True` (or a custom description string) to `onnx2torch.convert` to enable the same per-node progress feedback.
 
 ```bash
 python run.py --cfg cfg/example.yml
 ```
 
-Adjust per-input example tensors under the `example_inputs` section. Each override can define a `shape` for the exported program, an optional `warmup_shape` used during the lightweight warm-up pass, and dimension labels that reference shared scale knobs. The runner automatically clamps large shapes to avoid allocating impractically large tensors.
-
-```yaml
-example_inputs:
-  default_fill: zeros
-  overrides:
-    input_1:
-      shape: [1, 3, 4096]
-      warmup_shape: [1, 3, 512]
-      dim_labels: [batch, channels, sequence_length]
-  scales:
-    sequence_length: 2048
-  max_total_elements: 2000000
-  warmup_max_total_elements: 262144
-```
-
-The `scales` mapping exposes friendly knobs (e.g. `--scale sequence_length=512`) that clamp the labelled dimensions, while the element caps provide a final safeguard against excessive allocations. Running the exporter now requires PyTorch 2.3 or newer so that the `torch.export` APIs and SymInt-aware utilities are available.
+Remark: it is assumed that the input ONNX model's shapes are already known. If not provided, the conversion cannot proceed successfully.
 
 ## How to add new operations to converter
 

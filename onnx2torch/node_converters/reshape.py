@@ -80,10 +80,33 @@ class OnnxReshape(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: disa
         # Unpack one scalar per dimension so PyTorch receives SymInt args when tracing.
         target_dims = shape_tensor_to_sequence(adjusted_shape)
 
+        if target_dims:
+            dims_list = list(target_dims)
+            if all(isinstance(dim, int) for dim in dims_list):
+                product = 1
+                for dim in dims_list:
+                    product *= dim
+
+                input_numel = input_tensor.numel()
+                try:
+                    input_numel_int = int(input_numel)
+                except Exception:
+                    input_numel_int = -1
+
+                if input_numel_int >= 0 and product == input_numel_int:
+                    target_dims = tuple(dims_list)
+                else:
+                    largest_index = max(
+                        range(len(dims_list)),
+                        key=lambda index: abs(dims_list[index]),
+                    )
+                    dims_list[largest_index] = -1
+                    target_dims = tuple(dims_list)
+
         if not target_dims:
             return torch.ops.aten.view.default(input_tensor, [])
 
-        return torch.ops.aten.view.default(input_tensor, list(target_dims))
+        return torch.reshape(input_tensor, list(target_dims))
 
     def forward(  # pylint: disable=missing-function-docstring
         self,
@@ -137,6 +160,71 @@ class OnnxReshape(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: disa
         resolved_dims = tuple(dimension for dimension in dims if dimension is not None)
         if not resolved_dims:
             return torch.ops.aten.view.default(input_tensor, [])
+
+        product = 1
+        for dimension in resolved_dims:
+            product *= dimension
+
+        input_numel = input_tensor.numel()
+        try:
+            input_numel_int = int(input_numel)
+        except Exception:
+            input_numel_int = None
+
+        if input_numel_int is None:
+            shape_tensor = torch.tensor(self._static_shape, dtype=torch.int64)
+            try:
+                shape_tensor = shape_tensor.to(device=input_tensor.device)
+            except (RuntimeError, TypeError):
+                pass
+            return self._do_reshape(input_tensor, shape_tensor)
+
+        if product != input_numel_int:
+            dims_list = list(resolved_dims)
+            largest_index = max(
+                range(len(dims_list)), key=lambda index: abs(dims_list[index])
+            )
+            candidate_value = dims_list[largest_index]
+            if candidate_value == 0:
+                shape_tensor = torch.tensor(self._static_shape, dtype=torch.int64)
+                try:
+                    shape_tensor = shape_tensor.to(device=input_tensor.device)
+                except (RuntimeError, TypeError):
+                    pass
+                return self._do_reshape(input_tensor, shape_tensor)
+
+            divisor = product // candidate_value
+            if divisor == 0 or input_numel_int % divisor != 0:
+                shape_tensor = torch.tensor(self._static_shape, dtype=torch.int64)
+                try:
+                    shape_tensor = shape_tensor.to(device=input_tensor.device)
+                except (RuntimeError, TypeError):
+                    pass
+                return self._do_reshape(input_tensor, shape_tensor)
+
+            inferred_dim = input_numel_int // divisor
+            if inferred_dim <= 0:
+                shape_tensor = torch.tensor(self._static_shape, dtype=torch.int64)
+                try:
+                    shape_tensor = shape_tensor.to(device=input_tensor.device)
+                except (RuntimeError, TypeError):
+                    pass
+                return self._do_reshape(input_tensor, shape_tensor)
+
+            dims_list[largest_index] = inferred_dim
+            resolved_dims = tuple(dims_list)
+
+            product = 1
+            for dimension in resolved_dims:
+                product *= dimension
+
+            if product != input_numel_int:
+                shape_tensor = torch.tensor(self._static_shape, dtype=torch.int64)
+                try:
+                    shape_tensor = shape_tensor.to(device=input_tensor.device)
+                except (RuntimeError, TypeError):
+                    pass
+                return self._do_reshape(input_tensor, shape_tensor)
 
         return torch.ops.aten.view.default(input_tensor, list(resolved_dims))
 

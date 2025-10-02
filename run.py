@@ -24,6 +24,11 @@ from onnx2torch.converter import convert
 from onnx2torch.utils.dtype import onnx_dtype_to_torch_dtype
 from onnx2torch.utils.shape_warmup import shape_warmup
 
+try:
+    from tqdm.auto import tqdm
+except ImportError:  # pragma: no cover - fallback if dependency missing
+    tqdm = None
+
 try:  # torch < 2.1 does not expose torch.export.export
     from torch.export import export as export_program
 except (
@@ -635,10 +640,12 @@ def _export_model(
 
     with torch.inference_mode():
         try:
+            progress_label = f"Nodes {task.source.name}" if tqdm is not None else False
             module = convert(
                 model,
                 save_input_names=config.save_input_names,
                 attach_onnx_mapping=config.attach_onnx_mapping,
+                progress=progress_label,
             )
         except Exception as error:  # noqa: BLE001 - capture conversion failures
             failure_path = _write_failure_details(
@@ -675,6 +682,7 @@ def _export_model(
         )
 
         if warmup_args:
+            LOGGER.debug("Starting warmup execution for %s", task.source)
             try:
                 with shape_warmup():
                     module(*warmup_args)
@@ -695,9 +703,12 @@ def _export_model(
                     detail_path=failure_path,
                     message=f"Warm-up execution failed for {task.source}",
                 ) from None
+            else:
+                LOGGER.debug("Finished warmup execution for %s", task.source)
 
         captured = io.StringIO()
         try:
+            LOGGER.debug("Starting export_program for %s", task.source)
             with contextlib.redirect_stdout(captured), contextlib.redirect_stderr(
                 captured
             ):
@@ -719,6 +730,8 @@ def _export_model(
                 detail_path=failure_path,
                 message=f"Failed to export {task.source}",
             ) from None
+        else:
+            LOGGER.debug("Finished export_program for %s", task.source)
 
     task.destination.parent.mkdir(parents=True, exist_ok=True)
     exported.save(str(task.destination))
@@ -764,11 +777,27 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     failures = 0
-    for task in tasks:
-        try:
-            _export_model(task, config, run_context)
-        except ExportError:
-            failures += 1
+    progress_bar = None
+    if tqdm is not None and len(tasks) > 1:
+        progress_bar = tqdm(
+            total=len(tasks),
+            desc="Models",
+            unit="model",
+            leave=False,
+        )
+
+    try:
+        for task in tasks:
+            try:
+                _export_model(task, config, run_context)
+            except ExportError:
+                failures += 1
+            finally:
+                if progress_bar is not None:
+                    progress_bar.update()
+    finally:
+        if progress_bar is not None:
+            progress_bar.close()
 
     if failures:
         LOGGER.error(
