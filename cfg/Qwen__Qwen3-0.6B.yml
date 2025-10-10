@@ -6,7 +6,7 @@ inputs:
   pattern: '*.onnx'
 
 # Destination directory for the generated .pt2 files.
-output_dir: data/executorch
+output_dir: data/executorch/Qwen__Qwen3-0.6B
 
 conversion:
   save_input_names: false

@@ -1,0 +1,12 @@
+inputs:
+  path: data/onnx/distilbert__distilgpt2
+  recursive: true
+  pattern: '*.onnx'
+
+output_dir: data/executorch/distilbert__distilgpt2
+
+conversion:
+  save_input_names: false
+  attach_onnx_mapping: false
+
+device: cpu

@@ -12,6 +12,7 @@ from typing import Iterable
 from typing import Tuple
 
 import torch
+from torch.utils._python_dispatch import TorchDispatchMode
 
 
 LOGGER = logging.getLogger("onnx2torch.shape_warmup")
@@ -76,7 +77,7 @@ def _result_device(*tensors: torch.Tensor) -> torch.device:
     return torch.device("cpu")
 
 
-class ShapeWarmupMode(torch.utils._python_dispatch.TorchDispatchMode):
+class ShapeWarmupMode(TorchDispatchMode):
     """Dispatch mode that short-circuits heavy ops with zero placeholders."""
 
     _UNARY_ZERO = {

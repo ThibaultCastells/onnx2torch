@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Dict, Iterator, List, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Protocol, Sequence, Tuple
 
 import torch
 import torch.fx as fx
@@ -50,16 +50,32 @@ DEFAULT_OUTPUT_DIR = Path("data/executorch")
 RUN_LOG_ROOT = Path("logs/run_logs")
 SUPPORTED_FILLS = {"zeros", "ones", "random"}
 
+SaveCallable = Callable[[torch.export.ExportedProgram, Path], None]
+
 
 class BoolTypedStorageError(RuntimeError):
     """Raised when legacy serialization encounters boolean typed storage."""
 
 
-def _resolve_save_callable(exported: torch.export.ExportedProgram):
+class _HasGraphModule(Protocol):
+    @property
+    def graph_module(self) -> fx.GraphModule: ...
+
+
+def _resolve_save_callable(exported: torch.export.ExportedProgram) -> SaveCallable:
     if export_save is not None:
-        return lambda program, path: export_save(program, str(path))
+        save_impl = export_save
+
+        def _save(program: torch.export.ExportedProgram, path: Path) -> None:
+            save_impl(program, str(path))
+
+        return _save
     if hasattr(exported, "save"):
-        return lambda program, path: program.save(str(path))  # type: ignore[attr-defined]
+
+        def _save(program: torch.export.ExportedProgram, path: Path) -> None:
+            program.save(str(path))  # type: ignore[attr-defined]
+
+        return _save
     raise RuntimeError(
         "This version of torch does not support saving ExportedProgram instances. "
         "Please upgrade torch to >=2.1."
@@ -196,9 +212,11 @@ def _save_without_typed_storage(
     from torch._export.serde import serialize as serde_module
 
     try:
-        FakeTensor = serde_module.FakeTensor
-        _reduce_fake_tensor = serde_module._reduce_fake_tensor
-        DEFAULT_PICKLE_PROTOCOL = serde_module.DEFAULT_PICKLE_PROTOCOL
+        FakeTensor: type[Any] = getattr(serde_module, "FakeTensor")
+        _reduce_fake_tensor: Callable[..., Any] = getattr(
+            serde_module, "_reduce_fake_tensor"
+        )
+        DEFAULT_PICKLE_PROTOCOL: int = getattr(serde_module, "DEFAULT_PICKLE_PROTOCOL")
     except AttributeError as exc:  # pragma: no cover - internal API change
         raise AttributeError("serialize module missing FakeTensor helpers") from exc
 
@@ -211,7 +229,7 @@ def _save_without_typed_storage(
     original_serializer = serde_module.serialize_torch_artifact
 
     def _legacy_serialize(
-        artifact, pickle_protocol: int = DEFAULT_PICKLE_PROTOCOL
+        artifact: Any, pickle_protocol: int = DEFAULT_PICKLE_PROTOCOL
     ) -> bytes:
         if artifact is None:
             return b""
@@ -481,11 +499,28 @@ def _load_config(path: Path) -> RunnerConfig:
         if "path" not in entry:
             raise ValueError('Missing "path" in inputs item.')
 
+        pattern_raw = entry.get("pattern", "*.onnx")
+        if isinstance(pattern_raw, Path):
+            pattern_value = pattern_raw.as_posix()
+        else:
+            pattern_value = str(pattern_raw)
+
+        recursive_raw = entry.get("recursive", True)
+        if isinstance(recursive_raw, str):
+            recursive_value = recursive_raw.strip().lower() not in {
+                "0",
+                "false",
+                "no",
+                "off",
+            }
+        else:
+            recursive_value = bool(recursive_raw)
+
         inputs.append(
             InputConfig(
                 path=Path(entry["path"]),
-                pattern=entry.get("pattern", "*.onnx"),
-                recursive=entry.get("recursive", True),
+                pattern=pattern_value,
+                recursive=recursive_value,
             )
         )
 
@@ -670,7 +705,7 @@ def _build_example_and_warmup_args(
     return tuple(runtime_tensors), tuple(warmup_tensors)
 
 
-def _strip_runtime_guards(exported: torch.export.ExportedProgram) -> None:
+def _strip_runtime_guards(exported: _HasGraphModule) -> None:
     graph = exported.graph_module.graph
     guard_targets = {
         torch.ops.aten._assert_scalar.default,
