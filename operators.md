@@ -156,7 +156,7 @@ Minimal tested opset version 9, maximum tested opset version 16, recommended ops
 | Tile                      | Y         |                                                                                                                                                               |
 | TopK                      | Y         |                                                                                                                                                               |
 | Transpose                 | Y         |                                                                                                                                                               |
-| Trilu                     | N         |                                                                                                                                                               |
+| Trilu                     | Y         | Supports lower and upper triangular modes, including diagonal offsets (`k`).                                                                                |
 | Unique                    | N         |                                                                                                                                                               |
 | Unsqueeze                 | Y         |                                                                                                                                                               |
 | Upsample(deprecated)      | N         |                                                                                                                                                               |

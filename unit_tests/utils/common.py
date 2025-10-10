@@ -19,7 +19,34 @@ from onnx.helper import make_graph
 from onnx.helper import make_model
 from onnx.helper import make_operatorsetid
 from onnx.helper import make_tensor_value_info
-from onnx.mapping import NP_TYPE_TO_TENSOR_TYPE
+
+try:
+    from onnx.mapping import NP_TYPE_TO_TENSOR_TYPE
+except (
+    ImportError
+):  # pragma: no cover - fallback for ONNX versions without mapping module
+    from typing import Dict
+
+    from onnx.helper import tensor_dtype_to_np_dtype
+    from onnx.onnx_ml_pb2 import TensorProto
+
+    def _build_np_type_to_tensor_type() -> Dict[np.dtype, int]:
+        mapping: Dict[np.dtype, int] = {}
+        for attr in dir(TensorProto):
+            if attr.isupper():
+                value = getattr(TensorProto, attr)
+                if not isinstance(value, int):
+                    continue
+                try:
+                    np_dtype = tensor_dtype_to_np_dtype(value)
+                except (TypeError, ValueError):
+                    continue
+                if np_dtype is None:
+                    continue
+                mapping[np.dtype(np_dtype)] = value
+        return mapping
+
+    NP_TYPE_TO_TENSOR_TYPE = _build_np_type_to_tensor_type()
 from onnx.onnx_ml_pb2 import ModelProto
 from onnx.onnx_ml_pb2 import NodeProto
 from onnx.onnx_ml_pb2 import ValueInfoProto

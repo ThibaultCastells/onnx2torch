@@ -66,6 +66,7 @@ _CONVERTER_MODULES: Sequence[str] = (
     "onnx2torch.node_converters.squeeze",
     "onnx2torch.node_converters.sum",
     "onnx2torch.node_converters.tile",
+    "onnx2torch.node_converters.trilu",
     "onnx2torch.node_converters.topk",
     "onnx2torch.node_converters.transpose",
     "onnx2torch.node_converters.unsqueeze",

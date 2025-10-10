@@ -66,18 +66,29 @@ class OnnxScatterND(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: di
         indices: torch.Tensor,
         updates: torch.Tensor,
     ) -> torch.Tensor:
-        def _forward():
-            # There is no scatter nd for torch, use following formula:
-            # https://github.com/onnx/onnx/blob/master/docs/Operators.md#ScatterND
+        def _forward() -> torch.Tensor:
+            # Implement ScatterND using tensor-only operations so that symbolic export
+            # does not rely on Python-side integer materialization.
             output = data.clone()
 
-            ind_dim = indices.dim()
-            # last dimension is a partial-index into data
-            output_indices = indices.reshape((-1, indices.shape[-1])).T.tolist()
-            # update.shape = indices.shape[0:ind_dim-1] ++ data.shape[indices.shape[-1]:data.dim()-1]
-            output_updates = updates.reshape((-1, *updates.shape[ind_dim - 1 :]))
-            output[output_indices] = output_updates
+            num_index_dims = int(indices.shape[-1])
+            flat_indices = indices.reshape(-1, num_index_dims).to(dtype=torch.long)
 
+            # Map the multi-dimensional indices that address the prefix dimensions into
+            # a single linear index over the flattened prefix.
+            linear_idx = flat_indices.new_zeros(flat_indices.shape[0])
+            prefix_shape = output.shape[:num_index_dims]
+
+            for dim_size, dim_indices in zip(prefix_shape, flat_indices.T):
+                dim_indices = torch.remainder(dim_indices, dim_size)
+                linear_idx.mul_(dim_size).add_(dim_indices)
+
+            suffix_shape = output.shape[num_index_dims:]
+            flat_updates = updates.reshape(linear_idx.shape[0], *suffix_shape).to(
+                output.dtype
+            )
+
+            output.reshape(-1, *suffix_shape)[linear_idx] = flat_updates
             return output
 
         if torch.onnx.is_in_onnx_export():

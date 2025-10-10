@@ -67,7 +67,14 @@ def _return_zero_like(reference: torch.Tensor) -> torch.Tensor:
 
 
 def _result_type(*tensors: torch.Tensor) -> torch.dtype:
-    return torch.result_type(*tensors)
+    dtypes = [tensor.dtype for tensor in tensors if isinstance(tensor, torch.Tensor)]
+    if not dtypes:
+        return torch.float32
+
+    result = dtypes[0]
+    for dtype in dtypes[1:]:
+        result = torch.promote_types(result, dtype)
+    return result
 
 
 def _result_device(*tensors: torch.Tensor) -> torch.device:
