@@ -1,0 +1,13 @@
+inputs:
+  path: data/onnx/openai__whisper-tiny_encoder
+  recursive: true
+  pattern: '*.onnx'
+
+output_dir: data/executorch/openai__whisper-tiny_encoder
+
+conversion:
+  save_input_names: false
+  attach_onnx_mapping: false
+
+device: cpu
+
