@@ -80,16 +80,21 @@ class OnnxScatterND(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: di
             prefix_shape = output.shape[:num_index_dims]
 
             for dim_size, dim_indices in zip(prefix_shape, flat_indices.T):
-                dim_indices = torch.remainder(dim_indices, dim_size)
-                linear_idx.mul_(dim_size).add_(dim_indices)
+                dim_size_tensor = dim_indices.new_full((), dim_size)
+                dim_indices = torch.remainder(dim_indices, dim_size_tensor)
+                linear_idx = linear_idx * dim_size_tensor
+                linear_idx = linear_idx + dim_indices
 
             suffix_shape = output.shape[num_index_dims:]
             flat_updates = updates.reshape(linear_idx.shape[0], *suffix_shape).to(
                 output.dtype
             )
 
-            output.reshape(-1, *suffix_shape)[linear_idx] = flat_updates
-            return output
+            flat_output = output.reshape(-1, *suffix_shape)
+            flat_output = torch.ops.aten.index_put(
+                flat_output, (linear_idx,), flat_updates, False
+            )
+            return flat_output.reshape_as(output)
 
         if torch.onnx.is_in_onnx_export():
             onnx_attrs = self._onnx_attrs(opset_version=get_onnx_version())

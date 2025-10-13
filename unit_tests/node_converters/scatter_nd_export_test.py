@@ -46,3 +46,10 @@ def test_scatter_nd_traces_with_symbolic_shape() -> None:  # pylint: disable=mis
         model, (data, indices, updates), dynamic_shapes=dynamic_shapes
     )
     assert exported is not None
+
+    graph_module = exported.graph_module
+    inplace_ops = {
+        str(node.target) for node in graph_module.graph.nodes if hasattr(node, "target")
+    }
+    assert "aten.mul_.Tensor" not in inplace_ops
+    assert "aten.index_put_.default" not in inplace_ops

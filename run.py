@@ -13,7 +13,17 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Protocol, Sequence, Tuple
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterator,
+    List,
+    Optional,
+    Protocol,
+    Sequence,
+    Tuple,
+)
 
 import torch
 import torch.fx as fx
@@ -31,7 +41,9 @@ except ImportError:  # pragma: no cover - fallback if dependency missing
     tqdm = None
 
 try:  # torch < 2.1 does not expose torch.export.export
+    from torch.export import _trace as export_trace
     from torch.export import export as export_program
+    from torch._export import utils as export_utils
 except (
     ImportError,
     AttributeError,
@@ -48,7 +60,7 @@ except (ImportError, AttributeError):  # pragma: no cover - guard for older torc
 LOGGER = logging.getLogger("onnx2torch.runner")
 DEFAULT_OUTPUT_DIR = Path("data/executorch")
 RUN_LOG_ROOT = Path("logs/run_logs")
-SUPPORTED_FILLS = {"zeros", "ones", "random"}
+SUPPORTED_FILLS = {"zeros", "ones", "random", "arange"}
 
 SaveCallable = Callable[[torch.export.ExportedProgram, Path], None]
 
@@ -93,6 +105,7 @@ class InputConfig:
 class ExampleInputConfig:
     default_fill: str = "zeros"
     enable_warmup: bool = True
+    fills: Dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -101,6 +114,7 @@ class RunnerConfig:
     output_dir: Path = DEFAULT_OUTPUT_DIR
     save_input_names: bool = False
     attach_onnx_mapping: bool = False
+    enable_runtime_asserts: bool = True
     device: str = "cpu"
     example_inputs: ExampleInputConfig = field(default_factory=ExampleInputConfig)
 
@@ -536,23 +550,64 @@ def _load_config(path: Path) -> RunnerConfig:
     if not isinstance(example_cfg_raw, dict):
         raise TypeError('The "example_inputs" section must be a mapping if provided.')
 
+    fills_raw = example_cfg_raw.get("fills", {})
+    if fills_raw in (None, ""):
+        fills_raw = {}
+    if not isinstance(fills_raw, dict):
+        raise TypeError(
+            'The "example_inputs.fills" section must be a mapping if provided.'
+        )
+
+    fills: Dict[str, str] = {}
+    for name, strategy in fills_raw.items():
+        fill_value = str(strategy).lower()
+        fills[str(name)] = fill_value
+
     example_cfg = ExampleInputConfig(
         default_fill=str(example_cfg_raw.get("default_fill", "zeros")).lower(),
         enable_warmup=bool(example_cfg_raw.get("enable_warmup", True)),
+        fills=fills,
     )
 
     if example_cfg.default_fill not in SUPPORTED_FILLS:
         raise ValueError(
             f'"default_fill" must be one of {sorted(SUPPORTED_FILLS)}, got {example_cfg.default_fill!r}.',
         )
+    invalid_overrides = {
+        name: fill
+        for name, fill in example_cfg.fills.items()
+        if fill not in SUPPORTED_FILLS
+    }
+    if invalid_overrides:
+        raise ValueError(
+            "Unsupported fill strategies in example_inputs.fills: "
+            + ", ".join(
+                f"{name}={value!r}" for name, value in sorted(invalid_overrides.items())
+            )
+        )
 
     device = data.get("device", "cpu")
+
+    enable_runtime_asserts_raw = conversion_cfg.get("enable_runtime_asserts", True)
+    if isinstance(enable_runtime_asserts_raw, str):
+        enable_runtime_asserts_value = (
+            enable_runtime_asserts_raw.strip().lower()
+            not in {
+                "0",
+                "false",
+                "no",
+                "off",
+            }
+        )
+    else:
+        enable_runtime_asserts_value = bool(enable_runtime_asserts_raw)
 
     return RunnerConfig(
         inputs=inputs,
         output_dir=output_dir,
         save_input_names=bool(conversion_cfg.get("save_input_names", False)),
         attach_onnx_mapping=bool(conversion_cfg.get("attach_onnx_mapping", False)),
+        enable_runtime_asserts=enable_runtime_asserts_value,
         device=str(device),
         example_inputs=example_cfg,
     )
@@ -650,6 +705,18 @@ def _materialise_example_tensor(
         if dtype == torch.bool:
             return torch.randint(0, 2, shape_tuple, dtype=torch.bool, device=device)
         return torch.randint(0, 10, shape_tuple, dtype=dtype, device=device)
+    if fill == "arange":
+        if dtype == torch.bool:
+            raise ValueError(
+                "Fill strategy 'arange' is not supported for boolean tensors."
+            )
+        numel = 1
+        for dim in shape_tuple:
+            numel *= dim
+        base = torch.arange(numel, dtype=torch.int64, device=device)
+        if dtype != torch.int64:
+            base = base.to(dtype=dtype)
+        return base.reshape(shape_tuple)
 
     raise ValueError(f"Unsupported fill strategy {fill!r}.")
 
@@ -665,7 +732,7 @@ def _create_example_tensors(
 
     torch_dtype = _resolve_input_dtype(name, value_info.type.tensor_type.elem_type)
 
-    fill = example_cfg.default_fill
+    fill = example_cfg.fills.get(name, example_cfg.default_fill)
     if fill not in SUPPORTED_FILLS:
         raise ValueError(f"Unsupported fill strategy {fill!r} for input {name}.")
 
@@ -738,6 +805,38 @@ def _strip_runtime_guards(exported: _HasGraphModule) -> None:
     graph.eliminate_dead_code()
     graph.lint()
     exported.graph_module.recompile()
+
+
+@contextmanager
+def _runtime_asserts_disabled() -> Iterator[None]:
+    original_utils = getattr(export_utils, "apply_runtime_assertion_pass", None)
+    original_trace = getattr(export_trace, "apply_runtime_assertion_pass", None)
+
+    def _passthrough(
+        graph_module: fx.GraphModule,
+        graph_signature: Any,  # type: ignore[type-arg]
+    ) -> Tuple[fx.GraphModule, Any]:
+        return graph_module, graph_signature
+
+    if original_utils is not None:
+        setattr(export_utils, "apply_runtime_assertion_pass", _passthrough)
+    if original_trace is not None:
+        setattr(export_trace, "apply_runtime_assertion_pass", _passthrough)
+    try:
+        yield
+    finally:
+        if original_utils is not None:
+            setattr(export_utils, "apply_runtime_assertion_pass", original_utils)
+        if original_trace is not None:
+            setattr(export_trace, "apply_runtime_assertion_pass", original_trace)
+
+
+def _is_runtime_assert_failure(error: Exception) -> bool:
+    message = str(error)
+    return (
+        "Runtime assertion failed for expression" in message
+        or "GuardOnDataDependentSymNode" in message
+    )
 
 
 def _write_failure_details(
@@ -861,23 +960,54 @@ def _export_model(
             else:
                 LOGGER.debug("Finished warmup execution for %s", task.source)
 
-        captured = io.StringIO()
-        try:
-            LOGGER.debug("Starting export_program for %s", task.source)
-            with contextlib.redirect_stdout(captured), contextlib.redirect_stderr(
-                captured
-            ):
-                exported = export_program(
-                    module,
-                    runtime_args,
-                )
-                _strip_runtime_guards(exported)
-        except Exception as error:  # noqa: BLE001 - want to catch and wrap
+        LOGGER.debug("Starting export_program for %s", task.source)
+
+        def _attempt_export(
+            disable_asserts: bool = False,
+        ) -> Tuple[
+            bool, Optional[Exception], str, Optional[torch.export.ExportedProgram]
+        ]:
+            captured_output = io.StringIO()
+            try:
+                with contextlib.ExitStack() as stack:
+                    stack.enter_context(contextlib.redirect_stdout(captured_output))
+                    stack.enter_context(contextlib.redirect_stderr(captured_output))
+                    if disable_asserts:
+                        stack.enter_context(_runtime_asserts_disabled())
+                    exported_program = export_program(
+                        module,
+                        runtime_args,
+                    )
+                    _strip_runtime_guards(exported_program)
+            except Exception as export_error:  # noqa: BLE001 - propagate later
+                return False, export_error, captured_output.getvalue(), None
+
+            return True, None, captured_output.getvalue(), exported_program
+
+        initial_disable_asserts = not config.enable_runtime_asserts
+        success, export_error, captured_output, exported = _attempt_export(
+            disable_asserts=initial_disable_asserts
+        )
+
+        if (
+            not success
+            and not initial_disable_asserts
+            and export_error is not None
+            and _is_runtime_assert_failure(export_error)
+        ):
+            LOGGER.warning(
+                "Retrying export without runtime asserts for %s", task.source
+            )
+            success, export_error, captured_output, exported = _attempt_export(
+                disable_asserts=True
+            )
+
+        if not success or exported is None:
             failure_path = _write_failure_details(
                 task,
                 run_context,
-                error,
-                captured.getvalue(),
+                export_error or RuntimeError("Unknown export failure"),
+                captured_output,
             )
             LOGGER.error(
                 "Failed to export %s. Full traceback saved to %s",
@@ -889,8 +1019,8 @@ def _export_model(
                 detail_path=failure_path,
                 message=f"Failed to export {task.source}",
             ) from None
-        else:
-            LOGGER.debug("Finished export_program for %s", task.source)
+
+        LOGGER.debug("Finished export_program for %s", task.source)
 
     _run_export_verifier(exported, task, run_context)
 

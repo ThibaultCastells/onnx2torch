@@ -44,6 +44,7 @@ def _test_expand(
     (
         ([3, 1], [2, 1, 6]),
         ([3, 1], [3, 4]),
+        ([2, 3], [1, 1, 2, 1]),
     ),
 )
 def test_expand(src_shape: List[int], dst_shape: List[int]) -> None:  # pylint: disable=missing-function-docstring

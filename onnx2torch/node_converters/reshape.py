@@ -104,9 +104,9 @@ class OnnxReshape(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: disa
     ) -> torch.Tensor:
         if self._cached_target_shape is not None and self._is_fake_tensor(input_tensor):
             if not self._cached_target_shape:
-                return torch.ops.aten.view.default(input_tensor, [])
+                return torch.reshape(input_tensor, [])
 
-            return torch.reshape(input_tensor, list(self._cached_target_shape))
+            return torch.reshape(input_tensor, self._cached_target_shape)
 
         shape_tensor = shape.to(dtype=torch.int64)
         input_shape_tensor = self._input_shape_tensor(
@@ -148,7 +148,7 @@ class OnnxReshape(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: disa
         if not target_dims:
             if not self._is_fake_tensor(input_tensor):
                 self._maybe_cache_shape(())
-            return torch.ops.aten.view.default(input_tensor, [])
+            return torch.reshape(input_tensor, [])
 
         if not self._is_fake_tensor(input_tensor):
             try:
@@ -158,7 +158,7 @@ class OnnxReshape(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: disa
             else:
                 self._maybe_cache_shape(concrete_dims)
 
-        return torch.reshape(input_tensor, list(target_dims))
+        return torch.reshape(input_tensor, target_dims)
 
     def forward(  # pylint: disable=missing-function-docstring
         self,
@@ -212,7 +212,7 @@ class OnnxReshape(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: disa
         resolved_dims = tuple(dimension for dimension in dims if dimension is not None)
         if not resolved_dims:
             self._maybe_cache_shape(())
-            return torch.ops.aten.view.default(input_tensor, [])
+            return torch.reshape(input_tensor, [])
 
         product = 1
         for dimension in resolved_dims:
@@ -270,7 +270,7 @@ class OnnxReshape(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: disa
                 return self._do_reshape(input_tensor, shape_tensor)
 
         self._maybe_cache_shape(resolved_dims)
-        return torch.ops.aten.view.default(input_tensor, list(resolved_dims))
+        return torch.reshape(input_tensor, resolved_dims)
 
 
 @add_converter(operation_type="Reshape", version=5)

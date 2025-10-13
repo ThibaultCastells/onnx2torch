@@ -10,3 +10,8 @@ conversion:
   attach_onnx_mapping: false
 
 device: cpu
+
+example_inputs:
+  fills:
+    attention_mask: ones
+    position_ids: arange

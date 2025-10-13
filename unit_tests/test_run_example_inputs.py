@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 import onnx
 import torch
 from onnx import TensorProto, helper
@@ -62,3 +64,25 @@ def test_build_example_args_support_bool_inputs(tmp_path):
 
     assert runtime_args[0].dtype is torch.bool
     assert warmup_args[0].dtype is torch.bool
+
+
+def test_create_example_tensor_uses_per_input_fill():
+    value_info = helper.make_tensor_value_info(
+        "position_ids", TensorProto.INT64, [1, 4]
+    )
+    example_cfg = run.ExampleInputConfig(
+        default_fill="zeros", fills={"position_ids": "arange"}
+    )
+    runtime_tensor, warmup_tensor = run._create_example_tensors(
+        "position_ids", value_info, example_cfg, device="cpu"
+    )
+    expected = torch.arange(4, dtype=torch.int64).reshape(1, 4)
+    assert torch.equal(runtime_tensor, expected)
+    assert torch.equal(warmup_tensor, expected)
+
+
+def test_materialise_example_tensor_rejects_bool_arange():
+    with pytest.raises(ValueError):
+        run._materialise_example_tensor(
+            (2, 2), fill="arange", dtype=torch.bool, device="cpu"
+        )

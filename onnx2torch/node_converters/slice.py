@@ -200,11 +200,15 @@ class OnnxSlice(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: disabl
         self,
         constant_axes: Optional[np.ndarray] = None,
         constant_steps: Optional[np.ndarray] = None,
+        constant_starts: Optional[np.ndarray] = None,
+        constant_ends: Optional[np.ndarray] = None,
     ):
         super().__init__()
 
         self._constant_axes = _maybe_constant_sequence(constant_axes)
         self._constant_steps = _maybe_constant_sequence(constant_steps)
+        self._constant_starts = _maybe_constant_sequence(constant_starts)
+        self._constant_ends = _maybe_constant_sequence(constant_ends)
         self._cached_static_slice: Optional[
             Tuple[Tuple[int, ...], Tuple[int, ...], Tuple[int, ...], Tuple[int, ...]]
         ] = None
@@ -265,6 +269,10 @@ class OnnxSlice(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: disabl
         def _forward() -> torch.Tensor:
             starts_tuple = sequence_to_symint_tuple(starts)
             ends_tuple = sequence_to_symint_tuple(ends)
+            if self._constant_starts is not None and not _all_concrete(starts_tuple):
+                starts_tuple = self._constant_starts
+            if self._constant_ends is not None and not _all_concrete(ends_tuple):
+                ends_tuple = self._constant_ends
 
             if len(starts_tuple) != len(ends_tuple):
                 raise ValueError("Slice starts and ends must have the same length.")
@@ -360,6 +368,8 @@ def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: 
 def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: disable=unused-argument
     constant_axes = None
     constant_steps = None
+    constant_starts = None
+    constant_ends = None
 
     def _maybe_constant(value_name: str) -> Optional[np.ndarray]:
         value_type = graph.value_type(value_name)
@@ -380,6 +390,12 @@ def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: 
 
         return None
 
+    if len(node.input_values) >= 2:
+        constant_starts = _maybe_constant(node.input_values[1])
+
+    if len(node.input_values) >= 3:
+        constant_ends = _maybe_constant(node.input_values[2])
+
     if len(node.input_values) >= 4:
         axes_name = node.input_values[3]
         constant_axes = _maybe_constant(axes_name)
@@ -392,6 +408,8 @@ def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: 
         torch_module=OnnxSlice(
             constant_axes=constant_axes,
             constant_steps=constant_steps,
+            constant_starts=constant_starts,
+            constant_ends=constant_ends,
         ),
         onnx_mapping=onnx_mapping_from_node(node),
     )
