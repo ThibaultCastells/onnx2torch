@@ -1,5 +1,5 @@
 inputs:
-  path: data/onnx/distilbert__distilgpt2
+  path: ../onnx_shape_inference/data/shape_inferred/distilbert__distilgpt2
   recursive: true
   pattern: '*.onnx'
 

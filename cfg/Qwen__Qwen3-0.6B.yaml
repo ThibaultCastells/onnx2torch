@@ -1,7 +1,7 @@
 # Example configuration for run.py
-# This configuration converts every .onnx model under data/onnx/ recursively.
+# This configuration converts every .onnx model under ../onnx_shape_inference/data/shape_inferred/ recursively.
 inputs:
-  path: data/onnx/Qwen__Qwen3-0.6B
+  path: ../onnx_shape_inference/data/shape_inferred/Qwen__Qwen3-0.6B
   recursive: true
   pattern: '*.onnx'
 

@@ -1,5 +1,5 @@
 inputs:
-  path: data/onnx/openai__whisper-tiny_decoder
+  path: ../onnx_shape_inference/data/shape_inferred/openai__whisper-tiny_decoder
   recursive: true
   pattern: '*.onnx'
 
