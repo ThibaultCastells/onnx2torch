@@ -1,6 +1,7 @@
 # onnx2torch
 
 Convert ONNX models to torch.export ExportedProgram bundles (.pt2, ATen dialect).
+It is assumed that the input ONNX model's shapes are already known.
 
 # core instructions
 
