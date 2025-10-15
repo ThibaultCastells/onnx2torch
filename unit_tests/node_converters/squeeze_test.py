@@ -81,3 +81,33 @@ def test_squeeze(  # pylint: disable=missing-function-docstring
 ) -> None:
     x = np.random.randn(*shape).astype(np.float32)
     _test_squeeze(input_tensor=x, axes=axes, opset_version=opset_version)
+
+
+@pytest.mark.filterwarnings("ignore::torch.jit._trace.TracerWarning")
+@pytest.mark.parametrize("opset_version", [13, 21])
+def test_squeeze_axes_initializer(opset_version: int) -> None:  # pylint: disable=missing-function-docstring
+    x = np.random.randn(1, 3, 1, 5).astype(np.float32)
+    axes = np.array([0, 2], dtype=np.int64)
+
+    node = onnx.helper.make_node(
+        op_type="Squeeze",
+        inputs=["input_tensor", "axes"],
+        outputs=["y"],
+    )
+
+    output_shape = np.squeeze(x, axis=(0, 2)).shape
+    model = make_model_from_nodes(
+        nodes=node,
+        initializers={"axes": axes},
+        inputs_example={"input_tensor": x},
+        outputs_info=(
+            make_tensor_value_info(
+                name="y",
+                elem_type=NP_TYPE_TO_TENSOR_TYPE[x.dtype],
+                shape=output_shape,
+            ),
+        ),
+        opset_version=opset_version,
+    )
+
+    check_onnx_model(model, {"input_tensor": x})
