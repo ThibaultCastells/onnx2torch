@@ -13,6 +13,7 @@ from onnx2torch.utils.common import OperationConverterResult
 from onnx2torch.utils.common import onnx_mapping_from_node
 from onnx2torch.utils.custom_export_to_onnx import DefaultExportToOnnx
 from onnx2torch.utils.custom_export_to_onnx import OnnxToTorchModuleWithCustomExport
+from onnx2torch.utils.shape_utils import shape_tensor_to_sequence
 
 
 class OnnxTile(nn.Module, OnnxToTorchModuleWithCustomExport):
@@ -20,7 +21,11 @@ class OnnxTile(nn.Module, OnnxToTorchModuleWithCustomExport):
         self, input_tensor: torch.Tensor, repeats: torch.Tensor
     ) -> torch.Tensor:
         def _forward() -> torch.Tensor:
-            return input_tensor.repeat(torch.Size(repeats))
+            repeat_factors = shape_tensor_to_sequence(repeats)
+            if not repeat_factors:
+                return input_tensor
+
+            return input_tensor.repeat(*repeat_factors)
 
         if torch.onnx.is_in_onnx_export():
             return DefaultExportToOnnx.export(
