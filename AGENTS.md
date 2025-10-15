@@ -12,20 +12,14 @@ It is assumed that the input ONNX model's shapes are already known.
     - Use the `--cfg` CLI argument to specify the config file path.
     - By default, the configs are in `cfg/`
 - Change logs
-    - Log significant changes in the monthly log file under `logs/contrib_logs/`.
-    - The file name format is yymm.md (e.g., 2509.md).
-    - Each entry must include:
-        - Date and time (UTC)
-        - A concise summary of the change
-        - The list of modified files
-    - Example:
-        ``` markdown
-        ## 2025-09-26
+    - run `python logs/contrib_logs/log_new_contrib.py` to create a new log entry, then fill in the Summary and Files lines before committing. Example of log content:
+    ``` markdown
+    ## 2025-09-26
 
-        ### 2025-09-26 01:14 UTC
-        - Summary: Removed legacy visit limit alias; refreshed CLI docs/tests and daily log structure
-        - Files: src/my_library/example.py, unit_tests/test.py, README.md, logs/2509.md
-        ```
+    ### 2025-09-26 01:14 UTC
+    - Summary: Removed legacy visit limit alias; refreshed CLI docs/tests and daily log structure
+    - Files: src/hf_fetch_and_convert/search_models.py, unit_tests/test_list_candidates.py, unit_tests/test_search_models.py, README.md, logs/2509.md
+    ```
 - Run logs:
     - All run logs should be saved in `logs/run_logs/`.
     - Create one folder per run, containing:
