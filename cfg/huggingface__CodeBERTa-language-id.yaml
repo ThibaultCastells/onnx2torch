@@ -1,0 +1,9 @@
+inputs:
+  path: ../onnx_shape_inference/data/shape_inferred/huggingface__CodeBERTa-language-id
+  recursive: true
+  pattern: '*.onnx'
+output_dir: data/executorch/huggingface__CodeBERTa-language-id
+conversion:
+  save_input_names: false
+  attach_onnx_mapping: false
+device: cpu

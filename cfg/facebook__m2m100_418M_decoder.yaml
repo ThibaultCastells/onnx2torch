@@ -1,0 +1,9 @@
+inputs:
+  path: ../onnx_shape_inference/data/shape_inferred/facebook__m2m100_418M_decoder
+  recursive: true
+  pattern: '*.onnx'
+output_dir: data/executorch/facebook__m2m100_418M_decoder
+conversion:
+  save_input_names: false
+  attach_onnx_mapping: false
+device: cpu

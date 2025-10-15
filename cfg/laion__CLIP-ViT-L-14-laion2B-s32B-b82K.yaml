@@ -1,0 +1,9 @@
+inputs:
+  path: ../onnx_shape_inference/data/shape_inferred/laion__CLIP-ViT-L-14-laion2B-s32B-b82K
+  recursive: true
+  pattern: '*.onnx'
+output_dir: data/executorch/laion__CLIP-ViT-L-14-laion2B-s32B-b82K
+conversion:
+  save_input_names: false
+  attach_onnx_mapping: false
+device: cpu

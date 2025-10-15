@@ -1,0 +1,9 @@
+inputs:
+  path: ../onnx_shape_inference/data/shape_inferred/klue__roberta-small
+  recursive: true
+  pattern: '*.onnx'
+output_dir: data/executorch/klue__roberta-small
+conversion:
+  save_input_names: false
+  attach_onnx_mapping: false
+device: cpu

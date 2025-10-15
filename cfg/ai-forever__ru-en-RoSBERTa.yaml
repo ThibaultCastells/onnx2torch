@@ -1,0 +1,9 @@
+inputs:
+  path: ../onnx_shape_inference/data/shape_inferred/ai-forever__ru-en-RoSBERTa
+  recursive: true
+  pattern: '*.onnx'
+output_dir: data/executorch/ai-forever__ru-en-RoSBERTa
+conversion:
+  save_input_names: false
+  attach_onnx_mapping: false
+device: cpu

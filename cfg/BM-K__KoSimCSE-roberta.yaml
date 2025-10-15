@@ -1,0 +1,9 @@
+inputs:
+  path: ../onnx_shape_inference/data/shape_inferred/BM-K__KoSimCSE-roberta
+  recursive: true
+  pattern: '*.onnx'
+output_dir: data/executorch/BM-K__KoSimCSE-roberta
+conversion:
+  save_input_names: false
+  attach_onnx_mapping: false
+device: cpu

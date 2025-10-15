@@ -1,0 +1,9 @@
+inputs:
+  path: ../onnx_shape_inference/data/shape_inferred/dbmdz__bert-base-turkish-128k-uncased
+  recursive: true
+  pattern: '*.onnx'
+output_dir: data/executorch/dbmdz__bert-base-turkish-128k-uncased
+conversion:
+  save_input_names: false
+  attach_onnx_mapping: false
+device: cpu

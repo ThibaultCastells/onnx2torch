@@ -1,0 +1,9 @@
+inputs:
+  path: ../onnx_shape_inference/data/shape_inferred/albert__albert-base-v2
+  recursive: true
+  pattern: '*.onnx'
+output_dir: data/executorch/albert__albert-base-v2
+conversion:
+  save_input_names: false
+  attach_onnx_mapping: false
+device: cpu

@@ -1,0 +1,9 @@
+inputs:
+  path: ../onnx_shape_inference/data/shape_inferred/ds4sd__docling-layout-heron
+  recursive: true
+  pattern: '*.onnx'
+output_dir: data/executorch/ds4sd__docling-layout-heron
+conversion:
+  save_input_names: false
+  attach_onnx_mapping: false
+device: cpu

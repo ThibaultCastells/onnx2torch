@@ -1,0 +1,9 @@
+inputs:
+  path: ../onnx_shape_inference/data/shape_inferred/nvidia__segformer-b1-finetuned-cityscapes-1024-1024
+  recursive: true
+  pattern: '*.onnx'
+output_dir: data/executorch/nvidia__segformer-b1-finetuned-cityscapes-1024-1024
+conversion:
+  save_input_names: false
+  attach_onnx_mapping: false
+device: cpu

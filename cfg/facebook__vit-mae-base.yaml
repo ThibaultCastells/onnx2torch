@@ -1,0 +1,9 @@
+inputs:
+  path: ../onnx_shape_inference/data/shape_inferred/facebook__vit-mae-base
+  recursive: true
+  pattern: '*.onnx'
+output_dir: data/executorch/facebook__vit-mae-base
+conversion:
+  save_input_names: false
+  attach_onnx_mapping: false
+device: cpu

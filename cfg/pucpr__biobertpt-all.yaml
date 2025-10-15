@@ -1,0 +1,9 @@
+inputs:
+  path: ../onnx_shape_inference/data/shape_inferred/pucpr__biobertpt-all
+  recursive: true
+  pattern: '*.onnx'
+output_dir: data/executorch/pucpr__biobertpt-all
+conversion:
+  save_input_names: false
+  attach_onnx_mapping: false
+device: cpu

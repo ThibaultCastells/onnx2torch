@@ -1,0 +1,9 @@
+inputs:
+  path: ../onnx_shape_inference/data/shape_inferred/microsoft__BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext
+  recursive: true
+  pattern: '*.onnx'
+output_dir: data/executorch/microsoft__BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext
+conversion:
+  save_input_names: false
+  attach_onnx_mapping: false
+device: cpu

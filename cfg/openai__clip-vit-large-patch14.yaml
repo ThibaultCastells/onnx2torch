@@ -1,0 +1,9 @@
+inputs:
+  path: ../onnx_shape_inference/data/shape_inferred/openai__clip-vit-large-patch14
+  recursive: true
+  pattern: '*.onnx'
+output_dir: data/executorch/openai__clip-vit-large-patch14
+conversion:
+  save_input_names: false
+  attach_onnx_mapping: false
+device: cpu
