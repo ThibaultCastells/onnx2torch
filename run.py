@@ -7,6 +7,7 @@ import argparse
 import contextlib
 import io
 import logging
+import sys
 import shutil
 import traceback
 from contextlib import contextmanager
@@ -61,6 +62,7 @@ LOGGER = logging.getLogger("onnx2torch.runner")
 DEFAULT_OUTPUT_DIR = Path("data/executorch")
 RUN_LOG_ROOT = Path("logs/run_logs")
 SUPPORTED_FILLS = {"zeros", "ones", "random", "arange"}
+CONFIG_EXTENSIONS = {".yaml", ".yml"}
 
 SaveCallable = Callable[[torch.export.ExportedProgram, Path], None]
 
@@ -137,6 +139,19 @@ class RunContext:
     @property
     def show_full_trace(self) -> bool:
         return self.verbosity >= 2
+
+
+@dataclass(frozen=True)
+class BatchResult:
+    """Outcome of executing conversion for a single config file."""
+
+    config_path: Path
+    run_dir: Path
+    exit_code: int
+
+    @property
+    def succeeded(self) -> bool:
+        return self.exit_code == 0
 
 
 class ExportError(RuntimeError):
@@ -1033,31 +1048,47 @@ def _export_model(
     LOGGER.info("Saved %s", task.destination)
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Convert ONNX models to .pt2 (ExportedProgram)."
-    )
-    parser.add_argument(
-        "--cfg", required=True, type=Path, help="Path to the YAML config file."
-    )
-    parser.add_argument(
-        "-v", "--verbose", action="count", default=0, help="Increase logging verbosity."
-    )
-    args = parser.parse_args(argv)
+def _discover_config_paths(target: Path) -> Tuple[Path, List[Path]]:
+    """Resolve ``target`` into the list of config files to execute."""
+    resolved = target.expanduser().resolve()
+    if not resolved.exists():
+        raise FileNotFoundError(f"Configuration path does not exist: {resolved}")
 
-    cfg_path = args.cfg.expanduser()
-    run_context = _create_run_context(args.verbose)
+    if resolved.is_dir():
+        configs = [
+            path
+            for path in sorted(resolved.iterdir())
+            if path.is_file() and path.suffix.lower() in CONFIG_EXTENSIONS
+        ]
+        return resolved, configs
+
+    if resolved.is_file():
+        if resolved.suffix.lower() not in CONFIG_EXTENSIONS:
+            allowed = ", ".join(sorted(CONFIG_EXTENSIONS))
+            raise ValueError(
+                f"Configuration file must use one of ({allowed}), got {resolved}"
+            )
+        return resolved, [resolved]
+
+    raise ValueError(f"Configuration path is neither file nor directory: {resolved}")
+
+
+def _run_single_config(cfg_path: Path, verbosity: int) -> Tuple[int, RunContext]:
+    """Execute conversion for a single configuration file."""
+    resolved_cfg = cfg_path.expanduser().resolve()
+    run_context = _create_run_context(verbosity)
     _setup_logging(run_context)
 
     LOGGER.info("Run logs directory: %s", run_context.directory)
+    LOGGER.info("Using config file: %s", resolved_cfg)
 
-    config = _load_config(cfg_path)
-    _persist_run_config(cfg_path, run_context)
+    config = _load_config(resolved_cfg)
+    _persist_run_config(resolved_cfg, run_context)
     tasks = _collect_tasks(config)
 
     if not tasks:
         LOGGER.warning("No ONNX models found. Nothing to do.")
-        return 0
+        return 0, run_context
 
     failures = 0
     progress_bar = None
@@ -1089,10 +1120,80 @@ def main(argv: Sequence[str] | None = None) -> int:
             len(tasks),
             run_context.directory,
         )
+        exit_code = 1
+    else:
+        LOGGER.info("Converted %d model(s).", len(tasks))
+        exit_code = 0
+
+    return exit_code, run_context
+
+
+def _print_batch_summary(results: Sequence[BatchResult]) -> None:
+    """Emit a brief summary of the batch execution outcomes."""
+    if len(results) <= 1:
+        return
+
+    successes = sum(1 for result in results if result.succeeded)
+    failures = len(results) - successes
+
+    print("\nBatch summary:", flush=True)
+    for result in results:
+        status = "OK" if result.succeeded else "FAIL"
+        print(
+            f"[{status}] {result.config_path.name} -> {result.run_dir}",
+            flush=True,
+        )
+    print(
+        f"Completed {len(results)} config(s): {successes} succeeded, {failures} failed.",
+        flush=True,
+    )
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Convert ONNX models to .pt2 (ExportedProgram)."
+    )
+    parser.add_argument(
+        "--cfg",
+        required=True,
+        type=Path,
+        help="Path to a YAML config file or a directory containing such files.",
+    )
+    parser.add_argument(
+        "-v", "--verbose", action="count", default=0, help="Increase logging verbosity."
+    )
+    args = parser.parse_args(argv)
+
+    try:
+        resolved_target, config_paths = _discover_config_paths(args.cfg)
+    except (FileNotFoundError, ValueError) as error:
+        print(f"[ERROR] {error}", file=sys.stderr)
         return 1
 
-    LOGGER.info("Converted %d model(s).", len(tasks))
-    return 0
+    if resolved_target.is_dir():
+        if not config_paths:
+            print(
+                f"[ERROR] No YAML configuration files found in {resolved_target}",
+                file=sys.stderr,
+            )
+            return 1
+
+        results: List[BatchResult] = []
+        for config_path in config_paths:
+            print(f"[INFO] Running config: {config_path.name}", flush=True)
+            exit_code, run_context = _run_single_config(config_path, args.verbose)
+            results.append(
+                BatchResult(
+                    config_path=config_path,
+                    run_dir=run_context.directory,
+                    exit_code=exit_code,
+                )
+            )
+        _print_batch_summary(results)
+        return 0 if all(result.succeeded for result in results) else 1
+
+    exit_code, _ = _run_single_config(config_paths[0], args.verbose)
+    return exit_code
 
 
 if __name__ == "__main__":  # pragma: no cover
