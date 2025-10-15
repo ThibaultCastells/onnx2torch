@@ -870,11 +870,15 @@ def _write_failure_details(
         failure_file = failure_dir / f"{base_name}_{counter}.log"
         counter += 1
 
+    traceback_text = "".join(
+        traceback.format_exception(error.__class__, error, error.__traceback__)
+    )
+
     sections = [
         f"Export failure for {task.source}",
         "",
         "Traceback:",
-        traceback.format_exc(),
+        traceback_text,
     ]
     if captured_output and captured_output.strip():
         sections.extend(["", "Captured stdout/stderr:", captured_output])
