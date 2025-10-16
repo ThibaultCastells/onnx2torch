@@ -4,10 +4,11 @@ __all__ = [
     "OnnxSlice",
 ]
 
+import warnings
+from typing import Callable
 from typing import List
 from typing import Optional
 from typing import Tuple
-import warnings
 
 import numpy as np
 import torch
@@ -18,6 +19,11 @@ try:  # pragma: no cover - SymInt introduced in newer torch versions
 except ImportError:  # pragma: no cover - fall back when SymInt is missing
     SymInt = int  # type: ignore[assignment]
 
+try:  # pragma: no cover - optional on older torch
+    from torch.fx.experimental.symbolic_shapes import SymNode  # type: ignore[attr-defined]
+except ImportError:  # pragma: no cover - fallback
+    SymNode = None  # type: ignore[assignment]
+
 from onnx2torch.node_converters.registry import add_converter
 from onnx2torch.onnx_graph import OnnxGraph
 from onnx2torch.onnx_graph import ValueType
@@ -26,6 +32,7 @@ from onnx2torch.onnx_tensor import OnnxTensor
 from onnx2torch.utils.common import OnnxToTorchModule
 from onnx2torch.utils.common import OperationConverterResult
 from onnx2torch.utils.common import onnx_mapping_from_node
+from onnx2torch.utils.common import get_const_value
 from onnx2torch.utils.custom_export_to_onnx import DefaultExportToOnnx
 from onnx2torch.utils.custom_export_to_onnx import OnnxToTorchModuleWithCustomExport
 from onnx2torch.utils.shape_utils import ShapeDimension
@@ -33,7 +40,51 @@ from onnx2torch.utils.shape_utils import sequence_to_symint_tuple
 from onnx2torch.utils.shape_warmup import is_shape_warmup_active
 
 
+def _maybe_as_int(value: ShapeDimension) -> Optional[int]:
+    if isinstance(value, torch.Tensor):
+        if value.numel() == 1:
+            return int(value.item())
+        return None
+
+    maybe_fn: Optional[Callable[[], Optional[int]]] = getattr(value, "maybe_as_int", None)
+    if callable(maybe_fn):
+        hint = maybe_fn()
+        if hint is not None:
+            return int(hint)
+
+    node = getattr(value, "node", None)
+    if node is not None:
+        maybe_node_fn = getattr(node, "maybe_as_int", None)
+        if callable(maybe_node_fn):
+            hint = maybe_node_fn()
+            if hint is not None:
+                return int(hint)
+
+    try:
+        return int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    except RuntimeError as error:
+        if "data-dependent expression" in str(error):
+            return None
+        raise
+
+    return None
+
+
 def _is_symbolic(value: ShapeDimension) -> bool:
+    if isinstance(value, (int, np.integer)):
+        return False
+    if isinstance(value, torch.Tensor):
+        return _maybe_as_int(value) is None
+
+    hint = _maybe_as_int(value)
+    if hint is not None:
+        return False
+
+    if SymNode is not None and isinstance(value, SymNode):
+        return True
+
     return isinstance(value, SymInt) and not isinstance(value, int)
 
 
@@ -48,10 +99,20 @@ def _coerce_int_tuple(
 ) -> Tuple[int, ...]:
     integers: List[int] = []
     for value in values:
+        if isinstance(value, (int, np.integer)):
+            integers.append(int(value))
+            continue
+
+        hint = _maybe_as_int(value)
+        if hint is not None:
+            integers.append(int(hint))
+            continue
+
         if _is_symbolic(value):
             raise NotImplementedError(
                 f"Slice {description} requires concrete integers; received a symbolic value."
             )
+
         integers.append(int(value))
     return tuple(integers)
 
@@ -151,9 +212,22 @@ def _apply_dynamic_slice(
         torch.ops.aten.sym_constrain_range.default(start, min=0)
         torch.ops.aten.sym_constrain_range.default(end - start, min=0)
         torch._check(start >= 0)
-        torch._check(end >= start)
+        dim_size = result.shape[dim]
+        dim_size_hint = _maybe_as_int(dim_size)
+        start_hint = _maybe_as_int(start)
+        end_hint = _maybe_as_int(end)
+        slice_end: ShapeDimension = end
+        if dim_size_hint is not None and end_hint is not None and end_hint > dim_size_hint:
+            slice_end = dim_size_hint
+            end_hint = dim_size_hint
+        if start_hint is not None and end_hint is not None:
+            torch._check(end_hint >= start_hint)
+        else:
+            torch._check(slice_end >= start)
+        if dim_size_hint is not None and end_hint is not None:
+            torch._check(end_hint <= dim_size_hint)
 
-        result = torch.ops.aten.slice.Tensor(result, dim, start, end, step_int)
+        result = torch.ops.aten.slice.Tensor(result, dim, start, slice_end, step_int)
 
     return result
 
@@ -220,9 +294,26 @@ class OnnxSlice(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: disabl
         length: int,
     ) -> Tuple[int, ...]:
         if axes is not None:
+            if isinstance(axes, torch.Tensor):
+                try:
+                    axes_list = [int(v) for v in axes.reshape(-1).tolist()]
+                    if len(axes_list) == length:
+                        self._constant_axes = tuple(axes_list)
+                        return self._constant_axes
+                except Exception:  # pragma: no cover - best effort for fake tensors
+                    pass
+
             axes_sequence = sequence_to_symint_tuple(axes)
             if _all_concrete(axes_sequence):
                 return _coerce_int_tuple(axes_sequence, description="axes")
+
+            if isinstance(axes, torch.Tensor):
+                try:
+                    axes_list = [int(v) for v in axes.detach().cpu().view(-1).tolist()]
+                    if len(axes_list) == length:
+                        return tuple(axes_list)
+                except Exception:  # pragma: no cover - best effort for fake tensors
+                    pass
 
             if self._constant_axes is not None:
                 if len(self._constant_axes) != length:
@@ -283,6 +374,16 @@ class OnnxSlice(nn.Module, OnnxToTorchModuleWithCustomExport):  # pylint: disabl
                 raise ValueError("Slice axes length must match starts length.")
 
             steps_tuple = self._resolve_steps(steps, length=len(starts_tuple))
+
+            if hasattr(torch, "_dynamo") and torch._dynamo.is_compiling():
+                return _apply_dynamic_slice(
+                    input_tensor,
+                    starts_tuple,
+                    ends_tuple,
+                    axes_tuple,
+                    steps_tuple,
+                    constant_steps=self._constant_steps,
+                )
 
             if (
                 _all_concrete(starts_tuple)
@@ -387,6 +488,26 @@ def _(node: OnnxNode, graph: OnnxGraph) -> OperationConverterResult:  # pylint: 
                     return np.array(constant_value)
                 if constant_value is not None:
                     return np.array([constant_value])
+            if producer.operation_type == "Unsqueeze":
+                base_value = _maybe_constant(producer.input_values[0])
+                if base_value is not None:
+                    result = np.array(base_value)
+                    axes_attr = producer.attributes.get("axes", [])
+                    for axis in sorted(axes_attr):
+                        result = np.expand_dims(result, axis)
+                    return result
+
+        try:
+            const_value = get_const_value(value_name, graph)
+        except KeyError:
+            return None
+
+        if isinstance(const_value, torch.Tensor):
+            return const_value.detach().cpu().numpy()
+        if isinstance(const_value, (list, tuple, np.ndarray)):
+            return np.array(const_value)
+        if const_value is not None:
+            return np.array([const_value])
 
         return None
 

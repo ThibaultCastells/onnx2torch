@@ -189,9 +189,7 @@ def _prepare_run_directory(config_path: Path | None = None) -> Path:
     return candidate
 
 
-def _create_run_context(
-    verbosity: int, config_path: Path | None = None
-) -> RunContext:
+def _create_run_context(verbosity: int, config_path: Path | None = None) -> RunContext:
     directory = _prepare_run_directory(config_path)
     return RunContext(directory=directory, verbosity=verbosity)
 

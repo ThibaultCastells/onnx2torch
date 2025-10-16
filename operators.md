@@ -169,6 +169,7 @@ Minimal tested opset version 9, maximum tested opset version 16, recommended ops
 | DynamicQuantizeLinear     | N         |                                                                                                                                                               |
 | GreaterOrEqual            | Y         |                                                                                                                                                               |
 | HardSwish                 | Y         |                                                                                                                                                               |
+| If                        | Y         | Uses `torch.cond` with recursively converted branch graphs; supports captured values from the surrounding scope.                                             |
 | LessOrEqual               | Y         |                                                                                                                                                               |
 | LogSoftmax                | Y         |                                                                                                                                                               |
 | MeanVarianceNormalization | N         |                                                                                                                                                               |

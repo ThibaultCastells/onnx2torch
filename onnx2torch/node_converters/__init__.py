@@ -23,6 +23,7 @@ _CONVERTER_MODULES: Sequence[str] = (
     "onnx2torch.node_converters.concat",
     "onnx2torch.node_converters.constant",
     "onnx2torch.node_converters.constant_of_shape",
+    "onnx2torch.node_converters.control_flow",
     "onnx2torch.node_converters.conv",
     "onnx2torch.node_converters.cumsum",
     "onnx2torch.node_converters.depth_to_space",

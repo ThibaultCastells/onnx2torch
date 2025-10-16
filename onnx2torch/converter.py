@@ -93,6 +93,8 @@ def convert(  # pylint: disable=too-many-locals, too-many-branches, too-many-sta
     }
 
     onnx_graph = OnnxGraph(onnx_model.graph)  # pylint: disable=no-member
+    onnx_graph.opset_import = opset_import
+    onnx_graph.ir_version = onnx_model.ir_version
     torch_graph = fx.Graph()
 
     torch_initializers = InitializersContainer()

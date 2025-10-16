@@ -13,6 +13,12 @@ from typing import Tuple
 
 import torch
 from torch.utils._python_dispatch import TorchDispatchMode
+from torch.utils._python_dispatch import _disable_current_modes
+
+try:  # pragma: no cover - FakeTensor may not exist on older torch
+    from torch._subclasses.fake_tensor import FakeTensor
+except ImportError:  # pragma: no cover - keep isinstance checks safe
+    FakeTensor = ()  # type: ignore[assignment]
 
 
 LOGGER = logging.getLogger("onnx2torch.shape_warmup")
@@ -276,18 +282,38 @@ class ShapeWarmupMode(TorchDispatchMode):
 
         if func in self._RESHAPE_OPS:
             input_tensor = args[0]
-            if func is torch.ops.aten._reshape_alias.default:
-                shape = args[1]
-            else:
-                shape = args[1]
+            preserve_values = False
+            if input_tensor.dtype is not None:
+                if (
+                    not input_tensor.dtype.is_floating_point
+                    and not input_tensor.dtype.is_complex
+                ):
+                    preserve_values = True
+            if input_tensor.numel() <= 64:
+                preserve_values = True
+
+            if preserve_values:
+                return func(*args, **kwargs)
+
+            shape = args[1]
 
             if isinstance(shape, torch.Tensor):
-                shape_sequence = [int(dim) for dim in shape.tolist()]
+                if is_shape_warmup_active() and not isinstance(shape, FakeTensor):
+                    with _disable_current_modes():
+                        shape_sequence = [
+                            int(dim) for dim in shape.reshape(-1).tolist()
+                        ]
+                else:
+                    shape_sequence = [int(dim) for dim in shape.reshape(-1).tolist()]
             else:
                 shape_sequence = []
                 for dim in shape:
                     if isinstance(dim, torch.Tensor):
-                        shape_sequence.append(int(dim.item()))
+                        if is_shape_warmup_active() and not isinstance(dim, FakeTensor):
+                            with _disable_current_modes():
+                                shape_sequence.append(int(dim.item()))
+                        else:
+                            shape_sequence.append(int(dim.item()))
                     else:
                         shape_sequence.append(int(dim))
 
