@@ -793,6 +793,10 @@ def _strip_runtime_guards(exported: _HasGraphModule) -> None:
         torch.ops.aten._assert_scalar.default,
     }
 
+    tensor_metadata_guard = getattr(torch.ops.aten, "_assert_tensor_metadata", None)
+    if tensor_metadata_guard is not None:
+        guard_targets.add(tensor_metadata_guard.default)
+
     sym_constrain = getattr(torch.ops.aten, "sym_constrain_range_for_size", None)
     if sym_constrain is not None:
         guard_targets.add(sym_constrain.default)
