@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from importlib import util as importlib_util
 from pathlib import Path
 from types import ModuleType
@@ -24,6 +25,17 @@ def _load_runner_module() -> ModuleType:
 
 
 runner = _load_runner_module()
+
+
+def _freeze_datetime(monkeypatch: pytest.MonkeyPatch, value: datetime) -> None:
+    class _FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz: object | None = None) -> datetime:
+            if tz is not None:
+                return value.astimezone(tz)  # type: ignore[call-arg]
+            return value
+
+    monkeypatch.setattr(runner, "datetime", _FrozenDateTime)
 
 
 def test_discover_config_paths_directory(tmp_path: Path) -> None:
@@ -65,3 +77,37 @@ def test_discover_config_paths_invalid_extension(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError):
         runner._discover_config_paths(invalid)
+
+
+def test_prepare_run_directory_uses_config_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    frozen_time = datetime(2025, 10, 15, 7, 55, 59, tzinfo=UTC)
+    _freeze_datetime(monkeypatch, frozen_time)
+    monkeypatch.setattr(runner, "RUN_LOG_ROOT", tmp_path / "run_logs")
+
+    config_path = tmp_path / "cfg" / "sample-config.yaml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text("inputs: []\n", encoding="utf-8")
+
+    run_dir = runner._prepare_run_directory(config_path)
+
+    assert run_dir == tmp_path / "run_logs" / "20251015_075559_sample-config"
+    assert run_dir.is_dir()
+
+
+def test_prepare_run_directory_strips_yml_suffix(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    frozen_time = datetime(2025, 10, 15, 7, 55, 59, tzinfo=UTC)
+    _freeze_datetime(monkeypatch, frozen_time)
+    monkeypatch.setattr(runner, "RUN_LOG_ROOT", tmp_path / "logs")
+
+    config_path = tmp_path / "cfg" / "experiment.yml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text("inputs: []\n", encoding="utf-8")
+
+    run_dir = runner._prepare_run_directory(config_path)
+
+    assert run_dir == tmp_path / "logs" / "20251015_075559_experiment"
+    assert run_dir.is_dir()

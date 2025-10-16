@@ -166,20 +166,33 @@ class ExportError(RuntimeError):
         self.detail_path = detail_path
 
 
-def _prepare_run_directory() -> Path:
+def _prepare_run_directory(config_path: Path | None = None) -> Path:
     RUN_LOG_ROOT.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
-    candidate = RUN_LOG_ROOT / timestamp
+    identifier: str | None = None
+    if config_path is not None:
+        suffix = config_path.suffix.lower()
+        if suffix in CONFIG_EXTENSIONS:
+            identifier = config_path.stem
+        else:
+            identifier = config_path.name
+    base_name = f"{timestamp}_{identifier}" if identifier else timestamp
+    candidate = RUN_LOG_ROOT / base_name
     suffix = 1
     while candidate.exists():
-        candidate = RUN_LOG_ROOT / f"{timestamp}_{suffix:02d}"
+        if identifier:
+            candidate = RUN_LOG_ROOT / f"{base_name}_{suffix:02d}"
+        else:
+            candidate = RUN_LOG_ROOT / f"{timestamp}_{suffix:02d}"
         suffix += 1
     candidate.mkdir()
     return candidate
 
 
-def _create_run_context(verbosity: int) -> RunContext:
-    directory = _prepare_run_directory()
+def _create_run_context(
+    verbosity: int, config_path: Path | None = None
+) -> RunContext:
+    directory = _prepare_run_directory(config_path)
     return RunContext(directory=directory, verbosity=verbosity)
 
 
@@ -1084,7 +1097,7 @@ def _discover_config_paths(target: Path) -> Tuple[Path, List[Path]]:
 def _run_single_config(cfg_path: Path, verbosity: int) -> Tuple[int, RunContext]:
     """Execute conversion for a single configuration file."""
     resolved_cfg = cfg_path.expanduser().resolve()
-    run_context = _create_run_context(verbosity)
+    run_context = _create_run_context(verbosity, resolved_cfg)
     _setup_logging(run_context)
 
     LOGGER.info("Run logs directory: %s", run_context.directory)
