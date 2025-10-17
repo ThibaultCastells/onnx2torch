@@ -1,0 +1,9 @@
+inputs:
+  path: ../onnx_shape_inference/data/shape_inferred/medicalai__ClinicalBERT
+  recursive: true
+  pattern: '*.onnx'
+output_dir: data/executorch/medicalai__ClinicalBERT
+conversion:
+  save_input_names: false
+  attach_onnx_mapping: false
+device: cpu

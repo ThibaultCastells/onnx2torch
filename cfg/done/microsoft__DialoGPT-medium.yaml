@@ -1,0 +1,9 @@
+inputs:
+  path: ../onnx_shape_inference/data/shape_inferred/microsoft__DialoGPT-medium
+  recursive: true
+  pattern: '*.onnx'
+output_dir: data/executorch/microsoft__DialoGPT-medium
+conversion:
+  save_input_names: false
+  attach_onnx_mapping: false
+device: cpu

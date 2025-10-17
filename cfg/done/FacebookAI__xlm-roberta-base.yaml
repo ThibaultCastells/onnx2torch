@@ -1,0 +1,9 @@
+inputs:
+  path: ../onnx_shape_inference/data/shape_inferred/FacebookAI__xlm-roberta-base
+  recursive: true
+  pattern: '*.onnx'
+output_dir: data/executorch/FacebookAI__xlm-roberta-base
+conversion:
+  save_input_names: false
+  attach_onnx_mapping: false
+device: cpu

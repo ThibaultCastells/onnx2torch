@@ -1,0 +1,9 @@
+inputs:
+  path: ../onnx_shape_inference/data/shape_inferred/dccuchile__bert-base-spanish-wwm-uncased
+  recursive: true
+  pattern: '*.onnx'
+output_dir: data/executorch/dccuchile__bert-base-spanish-wwm-uncased
+conversion:
+  save_input_names: false
+  attach_onnx_mapping: false
+device: cpu

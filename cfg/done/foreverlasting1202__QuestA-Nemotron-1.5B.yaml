@@ -1,0 +1,9 @@
+inputs:
+  path: ../onnx_shape_inference/data/shape_inferred/foreverlasting1202__QuestA-Nemotron-1.5B
+  recursive: true
+  pattern: '*.onnx'
+output_dir: data/executorch/foreverlasting1202__QuestA-Nemotron-1.5B
+conversion:
+  save_input_names: false
+  attach_onnx_mapping: false
+device: cpu

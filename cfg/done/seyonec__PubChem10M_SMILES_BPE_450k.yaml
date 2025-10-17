@@ -1,0 +1,9 @@
+inputs:
+  path: ../onnx_shape_inference/data/shape_inferred/seyonec__PubChem10M_SMILES_BPE_450k
+  recursive: true
+  pattern: '*.onnx'
+output_dir: data/executorch/seyonec__PubChem10M_SMILES_BPE_450k
+conversion:
+  save_input_names: false
+  attach_onnx_mapping: false
+device: cpu

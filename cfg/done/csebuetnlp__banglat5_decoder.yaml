@@ -1,0 +1,9 @@
+inputs:
+  path: ../onnx_shape_inference/data/shape_inferred/csebuetnlp__banglat5_decoder
+  recursive: true
+  pattern: '*.onnx'
+output_dir: data/executorch/csebuetnlp__banglat5_decoder
+conversion:
+  save_input_names: false
+  attach_onnx_mapping: false
+device: cpu
