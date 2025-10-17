@@ -1,16 +1,29 @@
-from typing import Any
-from typing import Dict
-from typing import List
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import onnx
 import pytest
 from onnx.helper import make_tensor_value_info
-from onnx.mapping import NP_TYPE_TO_TENSOR_TYPE
+try:  # ONNX >=1.17 exposes mapping under _mapping
+    from onnx.mapping import NP_TYPE_TO_TENSOR_TYPE  # type: ignore[attr-defined]
+except ImportError:  # pragma: no cover - compatibility for newer onnx
+    from onnx import _mapping  # type: ignore[attr-defined]
 
-from tests.utils.common import check_onnx_model
-from tests.utils.common import make_model_from_nodes
+    NP_TYPE_TO_TENSOR_TYPE = {
+        dtype_map.np_dtype: tensor_type
+        for tensor_type, dtype_map in _mapping.TENSOR_TYPE_MAP.items()
+    }
+import torch
+from torch.export import export as export_program
+
+from onnx import helper, TensorProto
+from onnx2torch.converter import convert
+try:
+    from tests.utils.common import check_onnx_model
+    from tests.utils.common import make_model_from_nodes
+except ModuleNotFoundError:  # pragma: no cover - fallback when running module directly
+    from ..utils.common import check_onnx_model  # type: ignore[assignment]
+    from ..utils.common import make_model_from_nodes  # type: ignore[assignment]
 
 
 def _test_squeeze(
@@ -111,3 +124,49 @@ def test_squeeze_axes_initializer(opset_version: int) -> None:  # pylint: disabl
     )
 
     check_onnx_model(model, {"input_tensor": x})
+
+
+@pytest.mark.filterwarnings("ignore::torch.jit._trace.TracerWarning")
+def test_squeeze_split_transpose_allows_export() -> None:  # pylint: disable=missing-function-docstring
+    qkv_info = make_tensor_value_info(
+        name="qkv",
+        elem_type=TensorProto.FLOAT,
+        shape=[1, 12, 3, 128, 64],
+    )
+    output_info = make_tensor_value_info(
+        name="out",
+        elem_type=TensorProto.FLOAT,
+        shape=None,
+    )
+
+    splits = helper.make_tensor("splits", TensorProto.INT64, dims=[3], vals=[1, 1, 1])
+    axes = helper.make_tensor("axes", TensorProto.INT64, dims=[1], vals=[2])
+
+    split_node = helper.make_node(
+        "Split", inputs=["qkv", "splits"], outputs=["q", "k", "v"], axis=2
+    )
+    squeeze_node = helper.make_node(
+        "Squeeze", inputs=["q", "axes"], outputs=["q_squeezed"]
+    )
+    transpose_node = helper.make_node(
+        "Transpose",
+        inputs=["q_squeezed"],
+        outputs=["out"],
+        perm=[0, 1, 3, 2],
+    )
+
+    graph = helper.make_graph(
+        nodes=[split_node, squeeze_node, transpose_node],
+        name="squeeze-transpose",
+        inputs=[qkv_info],
+        outputs=[output_info],
+        initializer=[splits, axes],
+    )
+
+    model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", 13)])
+    module = convert(model)
+    module.eval()
+
+    sample = torch.zeros(1, 12, 3, 128, 64)
+    exported = export_program(module, (sample,))
+    assert exported is not None

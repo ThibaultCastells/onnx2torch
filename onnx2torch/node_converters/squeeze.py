@@ -25,7 +25,7 @@ class OnnxSqueezeStaticAxes(nn.Module, OnnxToTorchModuleWithCustomExport):  # py
     def __init__(self, axes: Optional[List[int]] = None):
         super().__init__()
         if axes is not None:
-            axes = sorted(axes, reverse=True)
+            axes = [int(axis) for axis in axes]
 
         self.axes = axes
 
@@ -34,11 +34,25 @@ class OnnxSqueezeStaticAxes(nn.Module, OnnxToTorchModuleWithCustomExport):  # py
             if not self.axes:
                 return torch.squeeze(input_tensor)
 
-            result = input_tensor
-            for axes_id in self.axes:
-                result = torch.squeeze(result, dim=axes_id)
+            rank = input_tensor.dim()
+            if rank == 0:
+                return input_tensor
 
-            return result
+            normalized_axes = sorted({axis % rank for axis in self.axes})
+            if not normalized_axes:
+                return input_tensor
+
+            axes_set = set(normalized_axes)
+            new_shape = [
+                dimension
+                for index, dimension in enumerate(input_tensor.shape)
+                if index not in axes_set
+            ]
+
+            if not new_shape:
+                return input_tensor.reshape(())
+
+            return input_tensor.reshape(tuple(new_shape))
 
         if torch.onnx.is_in_onnx_export() and get_onnx_version() >= 13:
             args = [input_tensor]
